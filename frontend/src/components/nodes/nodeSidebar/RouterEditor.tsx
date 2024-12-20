@@ -22,13 +22,13 @@ interface Condition {
   logicalOperator?: LogicalOperator;
 }
 
-interface BranchCondition {
+interface RouteCondition {
   conditions: Condition[];
 }
 
-interface IfElseEditorProps {
-  branches: BranchCondition[];
-  onChange: (branches: BranchCondition[]) => void;
+interface RouteEditorProps {
+  routes: RouteCondition[];
+  onChange: (routes: RouteCondition[]) => void;
   inputSchema?: Record<string, string>;
   disabled?: boolean;
 }
@@ -52,12 +52,12 @@ const DEFAULT_CONDITION: Condition = {
   logicalOperator: "AND"
 };
 
-const DEFAULT_BRANCH: BranchCondition = {
+const DEFAULT_ROUTE: RouteCondition = {
   conditions: [{ ...DEFAULT_CONDITION }]
 };
 
-const IfElseEditor: React.FC<IfElseEditorProps> = ({
-  branches = [],
+const RouteEditor: React.FC<RouteEditorProps> = ({
+  routes = [],
   onChange,
   inputSchema = {},
   disabled = false,
@@ -67,56 +67,56 @@ const IfElseEditor: React.FC<IfElseEditorProps> = ({
     label: `${key} (${type})`,
   }));
 
-  const handleAddBranch = () => {
-    onChange([...branches, { ...DEFAULT_BRANCH }]);
+  const handleAddRoute = () => {
+    onChange([...routes, { ...DEFAULT_ROUTE }]);
   };
 
-  const handleRemoveBranch = (branchIndex: number) => {
-    const newBranches = [...branches];
-    newBranches.splice(branchIndex, 1);
-    onChange(newBranches);
+  const handleRemoveRoute = (routeIndex: number) => {
+    const newRoutes = [...routes];
+    newRoutes.splice(routeIndex, 1);
+    onChange(newRoutes);
   };
 
-  const handleAddCondition = (branchIndex: number) => {
-    const newBranches = branches.map((branch, index) => {
-      if (index === branchIndex) {
+  const handleAddCondition = (routeIndex: number) => {
+    const newRoutes = routes.map((route, index) => {
+      if (index === routeIndex) {
         return {
-          ...branch,
+          ...route,
           conditions: [
-            ...branch.conditions,
+            ...route.conditions,
             { ...DEFAULT_CONDITION }
           ]
         };
       }
-      return branch;
+      return route;
     });
-    onChange(newBranches);
+    onChange(newRoutes);
   };
 
-  const handleRemoveCondition = (branchIndex: number, conditionIndex: number) => {
-    const newBranches = branches.map((branch, index) => {
-      if (index === branchIndex && branch.conditions.length > 1) {
+  const handleRemoveCondition = (routeIndex: number, conditionIndex: number) => {
+    const newRoutes = routes.map((route, index) => {
+      if (index === routeIndex && route.conditions.length > 1) {
         return {
-          ...branch,
-          conditions: branch.conditions.filter((_, i) => i !== conditionIndex)
+          ...route,
+          conditions: route.conditions.filter((_, i) => i !== conditionIndex)
         };
       }
-      return branch;
+      return route;
     });
-    onChange(newBranches);
+    onChange(newRoutes);
   };
 
   const handleUpdateCondition = (
-    branchIndex: number,
+    routeIndex: number,
     conditionIndex: number,
     field: keyof Condition,
     value: string
   ) => {
-    const newBranches = branches.map((branch, index) => {
-      if (index === branchIndex) {
+    const newRoutes = routes.map((route, index) => {
+      if (index === routeIndex) {
         return {
-          ...branch,
-          conditions: branch.conditions.map((condition, i) => {
+          ...route,
+          conditions: route.conditions.map((condition, i) => {
             if (i === conditionIndex) {
               return { ...condition, [field]: value };
             }
@@ -124,25 +124,25 @@ const IfElseEditor: React.FC<IfElseEditorProps> = ({
           })
         };
       }
-      return branch;
+      return route;
     });
-    onChange(newBranches);
+    onChange(newRoutes);
   };
 
   return (
     <div className="conditionals-editor space-y-4">
-      {branches.map((branch, branchIndex) => (
-        <div key={branchIndex} className="branch-container p-4 border border-default-200 rounded-lg bg-default-100">
+      {routes.map((route, routeIndex) => (
+        <div key={routeIndex} className="route-container p-4 border border-default-200 rounded-lg bg-default-100">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold">
-              {branchIndex === 0 ? "Default Branch" : `Branch ${branchIndex + 1}`}
+              {routeIndex === 0 ? "Default Route" : `Route ${routeIndex + 1}`}
             </h3>
             <div className="flex gap-2">
               <Button
                 isIconOnly
                 radius="full"
                 variant="light"
-                onClick={() => handleAddCondition(branchIndex)}
+                onClick={() => handleAddCondition(routeIndex)}
                 disabled={disabled}
                 size="sm"
               >
@@ -153,8 +153,8 @@ const IfElseEditor: React.FC<IfElseEditorProps> = ({
                 radius="full"
                 variant="light"
                 color="danger"
-                onClick={() => handleRemoveBranch(branchIndex)}
-                disabled={disabled || branches.length <= 1}
+                onClick={() => handleRemoveRoute(routeIndex)}
+                disabled={disabled || routes.length <= 1}
                 size="sm"
               >
                 <Icon icon="solar:trash-bin-trash-linear" width={20} />
@@ -163,14 +163,14 @@ const IfElseEditor: React.FC<IfElseEditorProps> = ({
           </div>
 
           <div className="conditions-container space-y-4">
-            {branch.conditions.map((condition, conditionIndex) => (
+            {route.conditions.map((condition, conditionIndex) => (
               <div key={conditionIndex} className="condition-row space-y-2">
                 {conditionIndex > 0 && (
                   <RadioGroup
                     orientation="horizontal"
                     value={condition.logicalOperator}
                     onValueChange={(value) =>
-                      handleUpdateCondition(branchIndex, conditionIndex, 'logicalOperator', value as LogicalOperator)
+                      handleUpdateCondition(routeIndex, conditionIndex, 'logicalOperator', value as LogicalOperator)
                     }
                     size="sm"
                     className="justify-center"
@@ -186,7 +186,7 @@ const IfElseEditor: React.FC<IfElseEditorProps> = ({
                     size="sm"
                     selectedKeys={[condition.variable]}
                     onChange={(e) =>
-                      handleUpdateCondition(branchIndex, conditionIndex, 'variable', e.target.value)
+                      handleUpdateCondition(routeIndex, conditionIndex, 'variable', e.target.value)
                     }
                     placeholder="Select variable"
                     className="flex-1"
@@ -203,7 +203,7 @@ const IfElseEditor: React.FC<IfElseEditorProps> = ({
                     size="sm"
                     selectedKeys={[condition.operator]}
                     onChange={(e) =>
-                      handleUpdateCondition(branchIndex, conditionIndex, 'operator', e.target.value as ComparisonOperator)
+                      handleUpdateCondition(routeIndex, conditionIndex, 'operator', e.target.value as ComparisonOperator)
                     }
                     placeholder="Select operator"
                     className="flex-1"
@@ -220,7 +220,7 @@ const IfElseEditor: React.FC<IfElseEditorProps> = ({
                     size="sm"
                     value={condition.value}
                     onChange={(e) =>
-                      handleUpdateCondition(branchIndex, conditionIndex, 'value', e.target.value)
+                      handleUpdateCondition(routeIndex, conditionIndex, 'value', e.target.value)
                     }
                     placeholder="Value"
                     className="flex-1"
@@ -232,8 +232,8 @@ const IfElseEditor: React.FC<IfElseEditorProps> = ({
                     radius="full"
                     variant="light"
                     color="danger"
-                    onClick={() => handleRemoveCondition(branchIndex, conditionIndex)}
-                    disabled={disabled || branch.conditions.length <= 1}
+                    onClick={() => handleRemoveCondition(routeIndex, conditionIndex)}
+                    disabled={disabled || route.conditions.length <= 1}
                     size="sm"
                   >
                     <Icon icon="solar:trash-bin-trash-linear" width={20} />
@@ -248,15 +248,15 @@ const IfElseEditor: React.FC<IfElseEditorProps> = ({
       <Button
         variant="flat"
         color="primary"
-        onClick={handleAddBranch}
+        onClick={handleAddRoute}
         disabled={disabled}
         startContent={<Icon icon="solar:add-circle-linear" width={20} />}
         className="w-full"
       >
-        Add Branch
+        Add Route
       </Button>
     </div>
   );
 };
 
-export default IfElseEditor;
+export default RouteEditor;

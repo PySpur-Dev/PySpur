@@ -20,6 +20,8 @@ export interface WorkflowNode {
 export interface WorkflowLink {
   source_id: string;
   target_id: string;
+  source_handle?: string;
+  target_handle?: string;
 }
 
 export interface WorkflowDefinition {

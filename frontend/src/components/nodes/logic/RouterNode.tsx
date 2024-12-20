@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Handle, Position, useConnection } from '@xyflow/react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Handle, Position, useConnection, useUpdateNodeInternals } from '@xyflow/react';
 import BaseNode from '../BaseNode';
 import { Input, Card, Divider, Button, Select, SelectItem, RadioGroup, Radio } from '@nextui-org/react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -15,23 +15,23 @@ interface Condition {
   value: string;
 }
 
-interface Branch {
+interface Route {
   conditions: Condition[];
 }
 
-interface IfElseNodeData {
+interface RouterNodeData {
   color?: string;
   config: {
-    branches: Branch[];
+    routes: Route[];
     input_schema?: Record<string, string>;
     output_schema?: Record<string, string>;
     title?: string;
   };
 }
 
-interface IfElseNodeProps {
+interface RouterNodeProps {
   id: string;
-  data: IfElseNodeData;
+  data: RouterNodeData;
   selected?: boolean;
 }
 
@@ -53,11 +53,11 @@ const DEFAULT_CONDITION: Condition = {
   value: ''
 };
 
-const DEFAULT_BRANCH: Branch = {
+const DEFAULT_ROUTE: Route = {
   conditions: [{ ...DEFAULT_CONDITION }]
 };
 
-export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
+export const RouterNode: React.FC<RouterNodeProps> = ({ id, data }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [nodeWidth, setNodeWidth] = useState<string>('auto');
   const nodeRef = useRef<HTMLDivElement | null>(null);
@@ -74,22 +74,22 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
     label: `${key} (${type})`,
   }));
 
-  // Initialize branches if they don't exist or are invalid
+  // Initialize routes if they don't exist or are invalid
   useEffect(() => {
-    if (!data.config?.branches || !Array.isArray(data.config.branches) || data.config.branches.length === 0) {
-      handleUpdateBranches([{ ...DEFAULT_BRANCH }]);
+    if (!data.config?.routes || !Array.isArray(data.config.routes) || data.config.routes.length === 0) {
+      handleUpdateRoutes([{ ...DEFAULT_ROUTE }]);
     } else {
-      // Ensure each branch has valid conditions
-      const validBranches = data.config.branches.map(branch => ({
-        conditions: Array.isArray(branch.conditions) && branch.conditions.length > 0
-          ? branch.conditions.map((condition, index) => ({
+      // Ensure each route has valid conditions
+      const validRoutes = data.config.routes.map(route => ({
+        conditions: Array.isArray(route.conditions) && route.conditions.length > 0
+          ? route.conditions.map((condition, index) => ({
             ...condition,
             logicalOperator: index > 0 ? (condition.logicalOperator || 'AND') : undefined
           }))
           : [{ ...DEFAULT_CONDITION }]
       }));
-      if (JSON.stringify(validBranches) !== JSON.stringify(data.config.branches)) {
-        handleUpdateBranches(validBranches);
+      if (JSON.stringify(validRoutes) !== JSON.stringify(data.config.routes)) {
+        handleUpdateRoutes(validRoutes);
       }
     }
   }, []);
@@ -130,17 +130,17 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
     setNodeWidth(`${Math.min(Math.max(minNodeWidth, nodeRef.current.scrollWidth), maxNodeWidth)}px`);
   }, [data]);
 
-  const handleUpdateBranches = (newBranches: Branch[]) => {
+  const handleUpdateRoutes = (newRoutes: Route[]) => {
     const output_schema: Record<string, string> = {};
-    newBranches.forEach((_, index) => {
-      output_schema[`branch${index + 1}`] = 'any';
+    newRoutes.forEach((_, index) => {
+      output_schema[`Route_${index + 1}`] = 'any';
     });
 
-    const updatedData: IfElseNodeData = {
+    const updatedData: RouterNodeData = {
       ...data,
       config: {
         ...data.config,
-        branches: newBranches,
+        routes: newRoutes,
         input_schema: data.config?.input_schema || { input: 'any' },
         output_schema
       }
@@ -152,8 +152,8 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
     }));
   };
 
-  const addBranch = () => {
-    const newBranch: Branch = {
+  const addRoute = () => {
+    const newRoute: Route = {
       conditions: [{
         variable: '',
         operator: 'contains',
@@ -161,55 +161,55 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
       }]
     };
 
-    const newBranches: Branch[] = [
-      ...(data.config?.branches || []),
-      newBranch
+    const newRoutes: Route[] = [
+      ...(data.config?.routes || []),
+      newRoute
     ];
 
-    handleUpdateBranches(newBranches);
+    handleUpdateRoutes(newRoutes);
   };
 
-  const removeBranch = (index: number) => {
-    const newBranches = [...(data.config?.branches || [])];
-    newBranches.splice(index, 1);
-    handleUpdateBranches(newBranches);
+  const removeRoute = (index: number) => {
+    const newRoutes = [...(data.config?.routes || [])];
+    newRoutes.splice(index, 1);
+    handleUpdateRoutes(newRoutes);
   };
 
-  const addCondition = (branchIndex: number) => {
-    const newBranches = [...(data.config?.branches || [])].map((branch, index) => {
-      if (index === branchIndex) {
+  const addCondition = (routeIndex: number) => {
+    const newRoutes = [...(data.config?.routes || [])].map((route, index) => {
+      if (index === routeIndex) {
         return {
-          ...branch,
+          ...route,
           conditions: [
-            ...(branch.conditions || []),
+            ...(route.conditions || []),
             { ...DEFAULT_CONDITION, logicalOperator: 'AND' }
           ]
         };
       }
-      return branch;
+      return route;
     });
-    handleUpdateBranches(newBranches);
+    handleUpdateRoutes(newRoutes);
   };
 
-  const removeCondition = (branchIndex: number, conditionIndex: number) => {
-    const newBranches = [...(data.config?.branches || [])].map((branch, index) => {
-      if (index === branchIndex && branch.conditions?.length > 1) {
+  const removeCondition = (routeIndex: number, conditionIndex: number) => {
+    const newRoutes = [...(data.config?.routes || [])].map((route, index) => {
+      if (index === routeIndex && route.conditions?.length > 1) {
         return {
-          ...branch,
-          conditions: branch.conditions.filter((_, i) => i !== conditionIndex)
+          ...route,
+          conditions: route.conditions.filter((_, i) => i !== conditionIndex)
         };
       }
-      return branch;
+      return route;
     });
-    handleUpdateBranches(newBranches);
+    handleUpdateRoutes(newRoutes);
   };
 
-  const updateCondition = (branchIndex: number, conditionIndex: number, field: keyof Condition, value: string) => {
-    const newBranches = [...(data.config?.branches || [])].map((branch, index) => {
-      if (index === branchIndex) {
+  const updateCondition = (routeIndex: number, conditionIndex: number, field: keyof Condition, value: string) => {
+    const newRoutes = [...(data.config?.routes || [])].map((route, index) => {
+      if (index === routeIndex) {
         return {
-          ...branch,
-          conditions: (branch.conditions || []).map((condition, i) => {
+          ...route,
+          conditions: (route.conditions || []).map((condition, i) => {
             if (i === conditionIndex) {
               const updatedValue = field === 'logicalOperator' ? (value as 'AND' | 'OR') : value;
               return { ...condition, [field]: updatedValue };
@@ -218,9 +218,9 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
           })
         };
       }
-      return branch;
+      return route;
     });
-    handleUpdateBranches(newBranches as Branch[]);
+    handleUpdateRoutes(newRoutes as Route[]);
   };
 
   return (
@@ -261,25 +261,25 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
               <Divider className="flex-grow" />
             </div>
 
-            {/* Branches */}
+            {/* Routes */}
             <div className="flex flex-col gap-4">
-              {(data.config?.branches || []).map((branch, branchIndex) => (
+              {(data.config?.routes || []).map((route, routeIndex) => (
                 <Card
-                  key={branchIndex}
+                  key={routeIndex}
                   classNames={{
                     base: "bg-background border-default-200"
                   }}
                 >
                   <div className="flex flex-col gap-3">
                     {/* Conditions */}
-                    {(branch.conditions || []).map((condition, conditionIndex) => (
+                    {(route.conditions || []).map((condition, conditionIndex) => (
                       <div key={conditionIndex} className="flex flex-col gap-2">
                         {conditionIndex > 0 && (
                           <div className="flex items-center gap-2 justify-center">
                             <RadioGroup
                               orientation="horizontal"
                               value={condition.logicalOperator}
-                              onValueChange={(value) => updateCondition(branchIndex, conditionIndex, 'logicalOperator', value)}
+                              onValueChange={(value) => updateCondition(routeIndex, conditionIndex, 'logicalOperator', value)}
                               size="sm"
                             >
                               <Radio value="AND">AND</Radio>
@@ -291,7 +291,7 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                           <Select
                             size="sm"
                             value={condition.variable}
-                            onChange={(e) => updateCondition(branchIndex, conditionIndex, 'variable', e.target.value)}
+                            onChange={(e) => updateCondition(routeIndex, conditionIndex, 'variable', e.target.value)}
                             placeholder="Select variable"
                             className="flex-1"
                             classNames={{
@@ -308,7 +308,7 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                           <Select
                             size="sm"
                             value={condition.operator}
-                            onChange={(e) => updateCondition(branchIndex, conditionIndex, 'operator', e.target.value)}
+                            onChange={(e) => updateCondition(routeIndex, conditionIndex, 'operator', e.target.value)}
                             className="flex-1"
                             classNames={{
                               trigger: "bg-default-100 dark:bg-default-50",
@@ -325,7 +325,7 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                             <Input
                               size="sm"
                               value={condition.value}
-                              onChange={(e) => updateCondition(branchIndex, conditionIndex, 'value', e.target.value)}
+                              onChange={(e) => updateCondition(routeIndex, conditionIndex, 'value', e.target.value)}
                               placeholder="Value"
                               className="flex-1"
                               classNames={{
@@ -338,8 +338,8 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                             size="sm"
                             color="danger"
                             isIconOnly
-                            onClick={() => removeCondition(branchIndex, conditionIndex)}
-                            disabled={branch.conditions?.length === 1}
+                            onClick={() => removeCondition(routeIndex, conditionIndex)}
+                            disabled={route.conditions?.length === 1}
                           >
                             <Icon icon="solar:trash-bin-trash-linear" width={18} />
                           </Button>
@@ -351,22 +351,22 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                     <Button
                       size="sm"
                       variant="flat"
-                      onClick={() => addCondition(branchIndex)}
+                      onClick={() => addCondition(routeIndex)}
                       startContent={<Icon icon="solar:add-circle-linear" width={18} />}
                       className="bg-default-100 dark:bg-default-50 hover:bg-default-200 dark:hover:bg-default-100"
                     >
                       Add Condition
                     </Button>
 
-                    {/* Branch Output Handle */}
+                    {/* Route Output Handle */}
                     <div className={`${styles.handleRow} w-full justify-end mt-2`}>
                       <div className="align-center flex flex-grow flex-shrink mr-2">
-                        <span className="text-sm font-medium ml-auto text-foreground">Branch {branchIndex + 1} →</span>
+                        <span className="text-sm font-medium ml-auto text-foreground">Route_{routeIndex + 1} →</span>
                       </div>
                       <Handle
                         type="source"
                         position={Position.Right}
-                        id={`branch${branchIndex + 1}`}
+                        id={`Route_${routeIndex + 1}`}
                         className={`${styles.handle} ${styles.handleRight} ${isCollapsed ? styles.collapsedHandleOutput : ''}`}
                       />
                     </div>
@@ -374,28 +374,28 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                 </Card>
               ))}
 
-              {/* Add Branch Button */}
+              {/* Add Route Button */}
               <Button
                 size="sm"
                 color="primary"
                 variant="flat"
-                onClick={addBranch}
+                onClick={addRoute}
                 startContent={<Icon icon="solar:add-circle-linear" width={18} />}
                 className="bg-default-100 dark:bg-default-50 hover:bg-default-200 dark:hover:bg-default-100"
               >
-                Add Branch
+                Add Route
               </Button>
             </div>
           </>
         )}
 
         {/* Output handles when collapsed */}
-        {isCollapsed && (data.config?.branches || []).map((_, branchIndex) => (
-          <div key={branchIndex} className={`${styles.handleRow} w-full justify-end mt-2`}>
+        {isCollapsed && (data.config?.routes || []).map((_, routeIndex) => (
+          <div key={routeIndex} className={`${styles.handleRow} w-full justify-end mt-2`}>
             <Handle
               type="source"
               position={Position.Right}
-              id={`branch${branchIndex + 1}`}
+              id={`Route_${routeIndex + 1}`}
               className={`${styles.handle} ${styles.handleRight} ${styles.collapsedHandleOutput}`}
             />
           </div>

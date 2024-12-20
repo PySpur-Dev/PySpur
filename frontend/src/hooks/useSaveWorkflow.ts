@@ -34,6 +34,8 @@ interface Edge {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
 }
 
 export const useSaveWorkflow = () => {
@@ -82,6 +84,17 @@ export const useSaveWorkflow = () => {
             links: edges.map((edge: Edge) => {
               const sourceNode = updatedNodes.find(node => node?.id === edge.source);
               const targetNode = updatedNodes.find(node => node?.id === edge.target);
+
+              if (sourceNode.type === 'RouterNode') {
+                console.log('sourceNode:', sourceNode);
+                console.log('sourceNode.config:', edge);
+                return {
+                  source_id: sourceNode?.new_id || '',
+                  target_id: targetNode?.new_id || '',
+                  source_handle: edge.sourceHandle,
+                  target_handle: edge.targetHandle,
+                };
+              }
 
               return {
                 source_id: sourceNode?.new_id || '',

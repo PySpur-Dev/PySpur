@@ -48,7 +48,7 @@ import { initializeFlow, setNodeOutputs } from '../../store/flowSlice';
 import InputNode from '../nodes/InputNode';
 import dagre from '@dagrejs/dagre';
 import LoadingSpinner from '../LoadingSpinner';
-import { IfElseNode } from '../nodes/logic/IfElseNode';
+import { RouterNode } from '../nodes/logic/RouterNode';
 import DynamicNode from '../nodes/DynamicNode';
 import { WorkflowDefinition } from '@/types/api_types/workflowSchemas';
 import { getLayoutedNodes } from '@/utils/nodeLayoutUtils';
@@ -92,8 +92,8 @@ const useNodeTypes = ({ nodeTypesConfig }: { nodeTypesConfig: NodeTypesConfig | 
       nodeTypesConfig[category].forEach(node => {
         if (node.name === 'InputNode') {
           acc[node.name] = InputNode;
-        } else if (node.name === 'IfElseNode') {
-          acc[node.name] = IfElseNode;
+        } else if (node.name === 'RouterNode') {
+          acc[node.name] = RouterNode;
         } else {
           acc[node.name] = (props) => {
             return <DynamicNode {...props} type={node.name} displayOutput={true}/>;

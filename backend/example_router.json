@@ -1,0 +1,151 @@
+{
+  "name": "New Spur 20/12/2024, 03:47:31",
+  "definition": {
+    "nodes": [
+      {
+        "id": "input_node",
+        "title": "input_node",
+        "node_type": "InputNode",
+        "config": {
+          "output_schema": {
+            "input_1": "str"
+          },
+          "enforce_schema": false
+        },
+        "coordinates": {
+          "x": 0,
+          "y": 167
+        },
+        "subworkflow": null
+      },
+      {
+        "id": "RouterNode_1",
+        "title": "RouterNode_1",
+        "node_type": "RouterNode",
+        "config": {
+          "description": "Configuration for the router node.",
+          "required": [
+            "routes"
+          ],
+          "title": "RouterNode_1",
+          "type": "object",
+          "input_schema": {
+            "input": "any"
+          },
+          "routes": [
+            {
+              "conditions": [
+                {
+                  "variable": "input",
+                  "operator": "contains",
+                  "value": "H"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "variable": "input",
+                  "operator": "contains",
+                  "value": "B"
+                }
+              ]
+            }
+          ],
+          "output_schema": {
+            "Route_1": "any",
+            "Route_2": "any"
+          }
+        },
+        "coordinates": {
+          "x": 438,
+          "y": 0
+        },
+        "subworkflow": null
+      },
+      {
+        "id": "SingleLLMCallNode_1",
+        "title": "SingleLLMCallNode_1",
+        "node_type": "SingleLLMCallNode",
+        "config": {
+          "title": "SingleLLMCallNode_1",
+          "type": "object",
+          "output_schema": {
+            "output": "str"
+          },
+          "llm_info": {
+            "model": "gpt-4o",
+            "max_tokens": 16384,
+            "temperature": 0.7,
+            "top_p": 1
+          },
+          "system_message": "You are a helpful assistant.",
+          "user_message": "",
+          "few_shot_examples": null
+        },
+        "coordinates": {
+          "x": 1376,
+          "y": 196
+        },
+        "subworkflow": null
+      },
+      {
+        "id": "SingleLLMCallNode_2",
+        "title": "SingleLLMCallNode_2",
+        "node_type": "SingleLLMCallNode",
+        "config": {
+          "title": "SingleLLMCallNode_2",
+          "type": "object",
+          "output_schema": {
+            "output": "str"
+          },
+          "llm_info": {
+            "model": "gpt-4o",
+            "max_tokens": 16384,
+            "temperature": 0.7,
+            "top_p": 1
+          },
+          "system_message": "You are a helpful assistant.",
+          "user_message": "",
+          "few_shot_examples": null
+        },
+        "coordinates": {
+          "x": 1376,
+          "y": 435
+        },
+        "subworkflow": null
+      }
+    ],
+    "links": [
+      {
+        "source_id": "input_node",
+        "target_id": "RouterNode_1",
+        "source_handle": null,
+        "target_handle": null
+      },
+      {
+        "source_id": "RouterNode_1",
+        "target_id": "SingleLLMCallNode_1",
+        "source_handle": "Route_1",
+        "target_handle": "RouterNode_1_Route_1"
+      },
+      {
+        "source_id": "RouterNode_1",
+        "target_id": "SingleLLMCallNode_2",
+        "source_handle": "Route_2",
+        "target_handle": "RouterNode_1_Route_2"
+      }
+    ],
+    "test_inputs": [
+      {
+        "id": 1734651396790,
+        "input_1": "<p>Hello</p>"
+      },
+      {
+        "id": 1734651402932,
+        "input_1": "<p>Bye</p>"
+      }
+    ]
+  },
+  "description": ""
+}

@@ -3,6 +3,20 @@ from typing import Dict, List
 from ..schemas.node_type_schemas import NodeTypeSchema
 
 # Simple lists of supported and deprecated node types
+
+LOGIC = [
+    {
+        "node_type_name": "RouterNode",
+        "module": ".nodes.logic.router",
+        "class_name": "RouterNode",
+    },
+    {
+        "node_type_name": "MergeNode",
+        "module": ".nodes.logic.merge",
+        "class_name": "MergeNode",
+    },
+]
+
 SUPPORTED_NODE_TYPES = {
     "Input/Output": [
         {
@@ -57,6 +71,7 @@ SUPPORTED_NODE_TYPES = {
             "class_name": "PythonFuncNode",
         },
     ],
+    "Logic": LOGIC,
 }
 
 DEPRECATED_NODE_TYPES = [
@@ -109,19 +124,6 @@ DEPRECATED_NODE_TYPES = [
         "node_type_name": "SubworkflowNode",
         "module": ".nodes.subworkflow.subworkflow_node",
         "class_name": "SubworkflowNode",
-    },
-]
-
-LOGIC = [
-    {
-        "node_type_name": "IfElseNode",
-        "module": ".nodes.logic.if_else",
-        "class_name": "IfElseNode",
-    },
-    {
-        "node_type_name": "MergeNode",
-        "module": ".nodes.logic.merge",
-        "class_name": "MergeNode",
     },
 ]
 

@@ -44,7 +44,7 @@ import useCopyPaste from '../../utils/useCopyPaste';
 import { useModeStore } from '../../store/modeStore';
 import { initializeFlow } from '../../store/flowSlice';
 import InputNode from '../nodes/InputNode';
-import { IfElseNode } from '../nodes/logic/IfElseNode';
+import { RouterNode } from '../nodes/logic/RouterNode';
 import MergeNode from '../nodes/logic/MergeNode';
 import { useSaveWorkflow } from '../../hooks/useSaveWorkflow';
 import LoadingSpinner from '../LoadingSpinner';
@@ -90,8 +90,8 @@ const useNodeTypes = ({ nodeTypesConfig }: { nodeTypesConfig: NodeTypesConfig | 
       nodeTypesConfig[category].forEach(node => {
         if (node.name === 'InputNode') {
           acc[node.name] = InputNode;
-        } else if (node.name === 'IfElseNode') {
-          acc[node.name] = IfElseNode;
+        } else if (node.name === 'RouterNode') {
+          acc[node.name] = RouterNode;
         } else if (node.name === 'MergeNode') {
           acc[node.name] = MergeNode;
         } else {
@@ -192,6 +192,7 @@ const FlowCanvasContent: React.FC<FlowCanvasProps> = (props) => {
 
   const onConnect: OnConnect = useCallback(
     (connection: Connection) => {
+      console.log('onConnect', connection);
       if (!connection.targetHandle || connection.targetHandle === 'node-body') {
         const sourceNode = nodes.find((n) => n.id === connection.source);
         const targetNode = nodes.find((n) => n.id === connection.target);
@@ -209,6 +210,21 @@ const FlowCanvasContent: React.FC<FlowCanvasProps> = (props) => {
             targetHandle: outputHandleName,
           };
         }
+      }
+      console.log('connection', connection);
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+
+      if (sourceNode.type === 'RouterNode') {
+        connection = {
+          ...connection,
+          targetHandle: connection.source + '_' + connection.sourceHandle,
+        };
+      }
+      else {
+        connection = {
+          ...connection,
+          targetHandle: connection.sourceHandle,
+        };
       }
 
       const newEdge: Edge = {
