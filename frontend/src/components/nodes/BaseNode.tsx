@@ -1,8 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { deleteNode, setSelectedNode, updateNodeData, addNode, setEdges, updateNodeTitle } from '../../store/flowSlice';
-import { Handle, getConnectedEdges, Node, Edge, Position } from '@xyflow/react';
-import { v4 as uuidv4 } from 'uuid';
+import { Handle, Position } from '@xyflow/react';
 import {
   Card,
   CardHeader,
@@ -13,38 +11,24 @@ import {
   Alert,
 } from "@nextui-org/react";
 import { Icon } from "@iconify/react";
+import { deleteCanvasNode, setSelectedNodeId, updateNodeTitle, CanvasNode } from '../../store/canvasSlice';
+import { deleteNodeData, NodeConfigData } from '../../store/nodeDataSlice';
 import usePartialRun from '../../hooks/usePartialRun';
 import { TaskStatus } from '@/types/api_types/taskSchemas';
 import isEqual from 'lodash/isEqual';
-import { FlowWorkflowNode } from '@/store/flowSlice';
+import { RootState } from '@/store/store';
 
 interface NodeData {
-  run?: Record<string, any>;
-  status?: string;
-  acronym?: string;
-  color?: string;
-  title?: string;
-  config?: {
-    title?: string;
-    [key: string]: any;
-  };
-  [key: string]: any;
-}
-
-interface RootState {
-  flow: {
-    nodes: Node[];
-    edges: Edge[];
-    selectedNode: string | null;
-    testInputs?: Array<{ id: string;[key: string]: any }>;
-  };
+  title: string;
+  acronym: string;
+  color: string;
 }
 
 interface BaseNodeProps {
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
   id: string;
-  data?: NodeData;
+  data: NodeData;
   children?: React.ReactNode;
   style?: React.CSSProperties;
   isInputNode?: boolean;
@@ -52,11 +36,11 @@ interface BaseNodeProps {
   handleOpenModal?: (isModalOpen: boolean) => void;
 }
 
-const getNodeTitle = (data: NodeData = {}): string => {
-  return data.config?.title || data.title || data.type || 'Untitled';
+const getNodeTitle = (data: NodeData): string => {
+  return data.title || 'Untitled';
 };
 
-const nodeComparator = (prevNode: FlowWorkflowNode, nextNode: FlowWorkflowNode) => {
+const nodeComparator = (prevNode: CanvasNode, nextNode: CanvasNode) => {
   if (!prevNode || !nextNode) return false;
   // Skip position and measured properties when comparing nodes
   const { position: prevPosition, measured: prevMeasured, ...prevRest } = prevNode;
@@ -64,11 +48,13 @@ const nodeComparator = (prevNode: FlowWorkflowNode, nextNode: FlowWorkflowNode) 
   return isEqual(prevRest, nextRest);
 };
 
-const nodesComparator = (prevNodes: FlowWorkflowNode[], nextNodes: FlowWorkflowNode[]) => {
-  if (!prevNodes || !nextNodes) return false;
-  if (prevNodes.length !== nextNodes.length) return false;
-  return prevNodes.every((node, index) => nodeComparator(node, nextNodes[index]));
-};
+interface PartialRunParams {
+  workflowId: string;
+  nodeId: string;
+  initialInputs: Record<string, any>;
+  partialOutputs: Record<string, any>;
+  rerunPredecessors: boolean;
+}
 
 const staticStyles = {
   container: {
@@ -125,23 +111,21 @@ const staticStyles = {
 const convertToPythonVariableName = (str: string): string => {
   // Replace spaces and hyphens with underscores
   str = str.replace(/[\s-]/g, '_');
-
   // Remove any non-alphanumeric characters except underscores
   str = str.replace(/[^a-zA-Z0-9_]/g, '');
-
   // Ensure the first character is a letter or underscore
   if (!/^[a-zA-Z_]/.test(str)) {
     str = '_' + str;
   }
-
   return str;
 };
 
 const BaseNode: React.FC<BaseNodeProps> = ({
   isCollapsed,
   setIsCollapsed,
-  handleOpenModal, id,
-  data = {},
+  handleOpenModal,
+  id,
+  data,
   children,
   style = {},
   isInputNode = false,
@@ -157,32 +141,23 @@ const BaseNode: React.FC<BaseNodeProps> = ({
   const dispatch = useDispatch();
 
   // Retrieve the node's position and edges from the Redux store
-  const node = useSelector((state: RootState) => state.flow.nodes.find((n) => n.id === id), nodeComparator);
-  const edges = useSelector((state: RootState) => state.flow.edges);
-  const selectedNodeId = useSelector((state: RootState) => state.flow.selectedNode);
+  const node = useSelector((state: RootState) => state.canvas.nodes.find((n) => n.id === id), nodeComparator);
+  const edges = useSelector((state: RootState) => state.canvas.edges);
+  const selectedNodeId = useSelector((state: RootState) => state.canvas.selectedNodeId);
+  const nodeData = useSelector((state: RootState) => state.nodeData.nodeDataById[id]);
 
   const initialInputs = useSelector((state: RootState) => {
-    const inputNodeId = state.flow?.nodes.find((node) => node.type === 'InputNode')?.id;
-    let testInputs = state.flow?.testInputs;
-    if (testInputs && Array.isArray(testInputs) && testInputs.length > 0) {
-      const { id, ...rest } = testInputs[0];
-      return { [inputNodeId as string]: rest };
-    }
-    return { [inputNodeId as string]: {} };
+    const inputNode = state.canvas.nodes.find((node) => node.type === 'InputNode');
+    if (!inputNode) return {};
+    const nodeConfig = state.nodeData.nodeDataById[inputNode.id];
+    return nodeConfig?.config || {};
   }, isEqual);
 
   const availableOutputs = useSelector((state: RootState) => {
-    const nodes = state.flow.nodes.map(node => ({
-      id: node.id,
-      data: {
-        run: node.data?.run
-      }
-    }));
-
     const outputs: Record<string, any> = {};
-    nodes.forEach((node) => {
-      if (node.data && node.data.run) {
-        outputs[node.id] = node.data.run;
+    Object.entries(state.nodeData.nodeDataById).forEach(([nodeId, nodeData]) => {
+      if (nodeData.run) {
+        outputs[nodeId] = nodeData.run;
       }
     });
     return outputs;
@@ -219,9 +194,10 @@ const BaseNode: React.FC<BaseNodeProps> = ({
   }, [isHovered, setShowControls, setIsTooltipHovered]);
 
   const handleDelete = () => {
-    dispatch(deleteNode({ nodeId: id }));
+    dispatch(deleteCanvasNode(id));
+    dispatch(deleteNodeData(id));
     if (selectedNodeId === id) {
-      dispatch(setSelectedNode({ nodeId: null }));
+      dispatch(setSelectedNodeId(null));
     }
   };
 
@@ -238,72 +214,24 @@ const BaseNode: React.FC<BaseNodeProps> = ({
     executePartialRun({
       workflowId,
       nodeId: id,
-      inputs: initialInputs,
-      availableOutputs,
+      initialInputs,
+      partialOutputs: availableOutputs,
       rerunPredecessors
-    }).then((result) => {
-      if (result) {
-        Object.entries(result).forEach(([nodeId, output_values]) => {
-          if (output_values) {
-            dispatch(updateNodeData({
-              id: nodeId,
-              data: {
-                run: {
-                  ...(node?.data?.run || {}),
-                  ...(output_values || {})
-                }
-              }
-            }));
-            dispatch(setSelectedNode({ nodeId }));
-          }
-        });
-      }
     }).finally(() => {
       setIsRunning(false);
     });
   };
 
-  const handleDuplicate = () => {
-    if (!node || !node.position) {
-      console.error('Node position not found');
-      return;
+  const handleTitleChange = (newTitle: string) => {
+    const validTitle = convertToPythonVariableName(newTitle);
+    if (validTitle && validTitle !== getNodeTitle(data)) {
+      dispatch(updateNodeTitle({ nodeId: id, newTitle: validTitle }));
     }
-
-    // Get all edges connected to the current node
-    const connectedEdges = getConnectedEdges([node], edges);
-
-    // Generate a new unique ID for the duplicated node
-    const newNodeId = `node_${Date.now()}`;
-
-    // Create the new node with an offset position
-    const newNode = {
-      ...node,
-      id: newNodeId,
-      position: { x: node.position.x + 20, y: node.position.y + 20 }, // Offset the position slightly
-      selected: false, // Ensure the new node is not selected by default
-    };
-
-    // Duplicate the edges connected to the node
-    const newEdges = connectedEdges.map((edge) => {
-      const newEdgeId = uuidv4();
-      return {
-        ...edge,
-        id: newEdgeId,
-        source: edge.source === id ? newNodeId : edge.source, // Update source if the current node is the source
-        target: edge.target === id ? newNodeId : edge.target, // Update target if the current node is the target
-      };
-    });
-
-    // Dispatch actions to add the new node and edges
-    dispatch(addNode({ node: newNode }));
-    dispatch(setEdges({ edges: [...edges, ...newEdges] }));
   };
 
   const isSelected = String(id) === String(selectedNodeId);
 
-  const status = data.run ? 'completed' : '';
-
-  const nodeRunStatus: TaskStatus = data.taskStatus;
+  const nodeRunStatus = nodeData?.taskStatus as TaskStatus | undefined;
 
   let borderColor = 'gray';
 
@@ -324,7 +252,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
       borderColor = 'gray';
       break;
     default:
-      if (status === 'completed') {
+      if (nodeData?.run) {
         borderColor = '#4CAF50';
       }
   }
@@ -336,15 +264,15 @@ const BaseNode: React.FC<BaseNodeProps> = ({
     borderColor,
     borderWidth: isSelected
       ? '3px'
-      : status === 'completed'
+      : nodeData?.run
         ? '2px'
         : isHovered
           ? '3px'
           : restStyle.borderWidth || '1px',
     borderStyle: 'solid',
     transition: 'border-color 0.1s, border-width 0.02s',
-    pointerEvents: 'auto'
-  }), [isSelected, status, isHovered, restStyle, borderColor]);
+    pointerEvents: 'auto' as const
+  }), [isSelected, nodeData?.run, isHovered, restStyle, borderColor]);
 
   const acronym = data.acronym || 'N/A';
   const color = data.color || '#ccc';
@@ -353,13 +281,6 @@ const BaseNode: React.FC<BaseNodeProps> = ({
     ...staticStyles.baseTag,
     backgroundColor: color
   }), [color]);
-
-  const handleTitleChange = (newTitle: string) => {
-    const validTitle = convertToPythonVariableName(newTitle);
-    if (validTitle && validTitle !== getNodeTitle(data)) {
-      dispatch(updateNodeTitle({ nodeId: id, newTitle: validTitle }));
-    }
-  };
 
   const headerStyle = React.useMemo(() => ({
     position: 'relative' as const,
@@ -504,22 +425,13 @@ const BaseNode: React.FC<BaseNodeProps> = ({
                 <Icon className="text-default-500" icon="solar:trash-bin-trash-linear" width={22} />
               </Button>
             )}
-            {/* Duplicate Button */}
-            <Button
-              isIconOnly
-              radius="full"
-              variant="light"
-              onPress={handleDuplicate}
-            >
-              <Icon className="text-default-500" icon="solar:copy-linear" width={22} />
-            </Button>
             {/* View Output Button */}
             {handleOpenModal && (
               <Button
                 isIconOnly
                 radius="full"
                 variant="light"
-                onPress={handleOpenModal}
+                onPress={() => handleOpenModal(true)}
               >
                 <Icon className="text-default-500" icon="solar:eye-linear" width={22} />
               </Button>

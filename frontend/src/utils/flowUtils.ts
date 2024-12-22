@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createNode } from './nodeFactory';
 import { ReactFlowInstance } from '@xyflow/react';
 import { AppDispatch } from '../store/store';
-import { addNode, connect, deleteEdge } from '../store/flowSlice';
+import { addNode, connect, deleteEdge } from '../store/canvasSlice';
 
 // Define types for the function parameters and return values
 interface NodeDefinition {
@@ -179,7 +179,7 @@ const generateNewNodeId = (
 
   while (existingIds.includes(newId)) {
     counter++;
-    newId = `${sanitizedType}_${counter}`; 
+    newId = `${sanitizedType}_${counter}`;
   }
 
   return newId;

@@ -1,31 +1,28 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
-  Handle, useHandleConnections, NodeProps, useConnection, Position, useUpdateNodeInternals
+  Handle, useHandleConnections, NodeProps, useConnection, Position, useUpdateNodeInternals,
+  Node as FlowNode
 } from '@xyflow/react';
 import { useSelector, useDispatch } from 'react-redux';
 import BaseNode from './BaseNode';
 import styles from './DynamicNode.module.css';
 import { Input } from '@nextui-org/react';
 import {
-  updateNodeData,
-  updateEdgesOnHandleRename,
-  FlowWorkflowNode,
-} from '../../store/flowSlice';
+  updateNodeTitle,
+  CanvasNode,
+  CanvasEdge
+} from '../../store/canvasSlice';
+import { updateNodeData, NodeConfigData } from '../../store/nodeDataSlice';
 import { selectPropertyMetadata } from '../../store/nodeTypesSlice';
 import { RootState } from '../../store/store';
 import NodeOutputDisplay from './NodeOutputDisplay';
 import NodeOutputModal from './NodeOutputModal';
 import isEqual from 'lodash/isEqual';
 
-interface NodeData {
-  config?: {
-    input_schema?: Record<string, any>;
-    output_schema?: Record<string, any>;
-    system_message?: string;
-    user_message?: string;
-  };
-  title?: string;
-  [key: string]: any;
+interface NodeData extends Record<string, unknown> {
+  title: string;
+  acronym: string;
+  color: string;
 }
 
 interface SchemaMetadata {
@@ -41,7 +38,7 @@ const updateMessageVariables = (message: string | undefined, oldKey: string, new
   return message.replace(regex, `{{${newKey}}}`);
 };
 
-interface DynamicNodeProps extends NodeProps {
+interface DynamicNodeProps extends Omit<NodeProps, 'data'> {
   id: string;
   type: string;
   data: NodeData;
@@ -51,7 +48,12 @@ interface DynamicNodeProps extends NodeProps {
   displayOutput?: boolean;
 }
 
-const nodeComparator = (prevNode: FlowWorkflowNode, nextNode: FlowWorkflowNode) => {
+interface HandleRowProps {
+  id: string;
+  keyName: string;
+}
+
+const nodeComparator = (prevNode: CanvasNode, nextNode: CanvasNode) => {
   if (!prevNode || !nextNode) return false;
   // Skip position and measured properties when comparing nodes
   const { position: prevPosition, measured: prevMeasured, ...prevRest } = prevNode;
@@ -59,7 +61,7 @@ const nodeComparator = (prevNode: FlowWorkflowNode, nextNode: FlowWorkflowNode) 
   return isEqual(prevRest, nextRest);
 };
 
-const nodesComparator = (prevNodes: FlowWorkflowNode[], nextNodes: FlowWorkflowNode[]) => {
+const nodesComparator = (prevNodes: CanvasNode[], nextNodes: CanvasNode[]) => {
   if (!prevNodes || !nextNodes) return false;
   if (prevNodes.length !== nextNodes.length) return false;
   return prevNodes.every((node, index) => nodeComparator(node, nextNodes[index]));
@@ -72,34 +74,16 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
-  const node = useSelector((state: RootState) => state.flow.nodes.find((n) => n.id === id), nodeComparator);
-  const nodes = useSelector((state: RootState) => 
-    state.flow.nodes.map(node => ({
-      id: node.id,
-      type: node.type,
-      data: {
-        config: {
-          title: node.data?.config?.title
-        }
-      }
-    })), 
-    (prev, next) => {
-      if (!prev || !next) return false;
-      if (prev.length !== next.length) return false;
-      return prev.every((node, index) => 
-        node.id === next[index].id && 
-        node.type === next[index].type && 
-        node.data?.config?.title === next[index].data?.config?.title
-      );
-    }
-  );
-  const nodeData = data || (node && node.data);
+  const node = useSelector((state: RootState) => state.canvas.nodes.find((n) => n.id === id), nodeComparator);
+  const nodeData = useSelector((state: RootState) => state.nodeData.nodeDataById[id]);
+  const nodes = useSelector((state: RootState) => state.canvas.nodes, nodesComparator);
+  const edges = useSelector((state: RootState) => state.canvas.edges);
   const dispatch = useDispatch();
-
-  const edges = useSelector((state: RootState) => state.flow.edges);
 
   const inputMetadata = useSelector((state: RootState) => selectPropertyMetadata(state, `${type}.input`));
   const outputMetadata = useSelector((state: RootState) => selectPropertyMetadata(state, `${type}.output`));
+
+  const [predecessorNodes, setPredcessorNodes] = useState<CanvasNode[]>([]);
 
   const excludeSchemaKeywords = (metadata: SchemaMetadata): Record<string, any> => {
     const schemaKeywords = ['required', 'title', 'type'];
@@ -157,19 +141,15 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
 
       dispatch(
         updateNodeData({
-          id,
-          data: {
-            config: updatedConfig,
-          },
+          nodeId: id,
+          newConfigFields: updatedConfig,
         })
       );
 
       dispatch(
-        updateEdgesOnHandleRename({
+        updateNodeTitle({
           nodeId: id,
-          oldHandleId: oldKey,
-          newHandleId: newKey,
-          schemaType,
+          newTitle: newKey,
         })
       );
 
@@ -177,41 +157,6 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
     },
     [dispatch, id, nodeData]
   );
-
-  useEffect(() => {
-    if (!nodeRef.current || !nodeData) return;
-
-    const inputLabels = predecessorNodes.map((node) =>
-      String(node?.data?.config?.title || node?.id || '')
-    );
-    const outputLabels = nodeData?.config?.title ? [String(nodeData.config.title)] : [String(id)];
-
-    const maxInputLabelLength = inputLabels.reduce((max, label) => Math.max(max, label.length), 0);
-    const maxOutputLabelLength = outputLabels.reduce((max, label) => Math.max(max, label.length), 0);
-    const titleLength = ((nodeData?.title || '').length + 10) * 1.25;
-
-    const maxLabelLength = Math.max(
-      (maxInputLabelLength + maxOutputLabelLength + 5),
-      titleLength
-    );
-
-    const minNodeWidth = 300;
-    const maxNodeWidth = 600;
-
-    const finalWidth = Math.min(
-      Math.max(maxLabelLength * 10, minNodeWidth),
-      maxNodeWidth
-    );
-    if (nodeWidth !== `${finalWidth}px`) {
-      console.log('Setting node width to:', finalWidth, 'original:', nodeWidth);
-      setNodeWidth(`${finalWidth}px`);
-    }
-  }, [nodeData, cleanedInputMetadata, cleanedOutputMetadata, predecessorNodes, nodeWidth]);
-
-  interface HandleRowProps {
-    id: string;
-    keyName: string;
-  }
 
   const InputHandleRow: React.FC<HandleRowProps> = ({ id, keyName }) => {
     const connections = useHandleConnections({ type: 'target', id: keyName });
@@ -256,9 +201,9 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
     );
   };
 
-  const OutputHandleRow: React.FC<HandleRowProps> = ({ keyName }) => {
+  const OutputHandleRow: React.FC<HandleRowProps> = ({ id, keyName }) => {
     return (
-      <div className={`${styles.handleRow} w-full justify-end`} key={`output-${keyName}`} id={`output-${keyName}-row`} >
+      <div className={`${styles.handleRow} w-full justify-end`} key={`output-${keyName}`} id={`output-${keyName}-row`}>
         {!isCollapsed && (
           <div className="align-center flex flex-grow flex-shrink mr-[0.5rem] max-w-full overflow-hidden" id={`output-${keyName}-label`}>
             {editingField === keyName ? (
@@ -288,8 +233,7 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
             type="source"
             position={Position.Right}
             id={keyName}
-            className={`${styles.handle} ${styles.handleRight} ${isCollapsed ? styles.collapsedHandleOutput : ''
-              }`}
+            className={`${styles.handle} ${styles.handleRight} ${isCollapsed ? styles.collapsedHandleOutput : ''}`}
             isConnectable={!isCollapsed}
           />
         </div>
@@ -297,28 +241,34 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
     );
   };
 
-  const [predecessorNodes, setPredcessorNodes] = useState(() => {
-    return edges
-      .filter((edge) => edge.target === id)
-      .map((edge) => {
-        const sourceNode = nodes.find((node) => node.id === edge.source);
-        if (!sourceNode) return null;
+  useEffect(() => {
+    if (!nodeRef.current || !nodeData) return;
 
-        if (sourceNode.type === 'IfElseNode' && edge.sourceHandle) {
-          return {
-            id: sourceNode.id,
-            type: sourceNode.type,
-            data: {
-              config: {
-                title: edge.sourceHandle
-              }
-            }
-          };
-        }
-        return sourceNode;
-      })
-      .filter(Boolean);
-  });
+    const inputLabels = predecessorNodes.map((node) =>
+      String(node?.data?.title || node?.id || '')
+    );
+    const outputLabels = nodeData?.config?.title ? [String(nodeData.config.title)] : [String(id)];
+
+    const maxInputLabelLength = inputLabels.reduce((max, label) => Math.max(max, label.length), 0);
+    const maxOutputLabelLength = outputLabels.reduce((max, label) => Math.max(max, label.length), 0);
+    const titleLength = ((data?.title || '').length + 10) * 1.25;
+
+    const maxLabelLength = Math.max(
+      (maxInputLabelLength + maxOutputLabelLength + 5),
+      titleLength
+    );
+
+    const minNodeWidth = 300;
+    const maxNodeWidth = 600;
+
+    const finalWidth = Math.min(
+      Math.max(maxLabelLength * 10, minNodeWidth),
+      maxNodeWidth
+    );
+    if (nodeWidth !== `${finalWidth}px`) {
+      setNodeWidth(`${finalWidth}px`);
+    }
+  }, [nodeData, data, cleanedInputMetadata, cleanedOutputMetadata, predecessorNodes, nodeWidth, id]);
 
   const connection = useConnection();
 
@@ -335,32 +285,32 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
             id: sourceNode.id,
             type: sourceNode.type,
             data: {
-              config: {
-                title: edge.sourceHandle
-              }
+              title: edge.sourceHandle,
+              acronym: sourceNode.data.acronym,
+              color: sourceNode.data.color
             }
-          };
+          } as CanvasNode;
         }
         return sourceNode;
       })
-      .filter(Boolean);
+      .filter((node): node is CanvasNode => node !== null);
 
     let result = updatedPredecessorNodes;
 
     if (connection.inProgress && connection.toNode && connection.toNode.id === id) {
-      if (connection.fromNode && !updatedPredecessorNodes.find((node: any) => node.id === connection.fromNode.id)) {
+      if (connection.fromNode && !updatedPredecessorNodes.find((node) => node.id === connection.fromNode?.id)) {
         if (connection.fromNode.type === 'IfElseNode' && connection.fromHandle) {
           result = [...updatedPredecessorNodes, {
             id: connection.fromNode.id,
             type: connection.fromNode.type,
             data: {
-              config: {
-                title: connection.fromHandle.nodeId
-              }
+              title: connection.fromHandle.nodeId,
+              acronym: connection.fromNode.data?.acronym || '',
+              color: connection.fromNode.data?.color || ''
             }
-          }];
-        } else {
-          result = [...updatedPredecessorNodes, connection.fromNode];
+          } as CanvasNode];
+        } else if (connection.fromNode) {
+          result = [...updatedPredecessorNodes, connection.fromNode as unknown as CanvasNode];
         }
       }
     }
@@ -370,7 +320,6 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
 
   useEffect(() => {
     // Check if finalPredecessors differ from predecessorNodes
-    // (We do a deeper comparison to detect config/title changes, not just ID changes)
     const hasChanged = finalPredecessors.length !== predecessorNodes.length ||
       finalPredecessors.some((newNode, i) => !isEqual(newNode, predecessorNodes[i]));
 
@@ -390,7 +339,7 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
         {/* Input Handles */}
         <div className={`${styles.handlesColumn} ${styles.inputHandlesColumn}`} id="input-handles">
           {predecessorNodes.map((node) => {
-            const handleId = String(node.data?.config?.title || node.id || '');
+            const handleId = String(node.data.title || node.id || '');
             return (
               <InputHandleRow
                 id={node.id}
@@ -403,9 +352,10 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
 
         {/* Output Handles */}
         <div className={`${styles.handlesColumn} ${styles.outputHandlesColumn}`} id="output-handle">
-          {nodeData?.title && (
+          {data.title && (
             <OutputHandleRow
-              keyName={String(nodeData.config.title || id)}
+              id={id}
+              keyName={String(data.title)}
             />
           )}
         </div>
@@ -425,11 +375,10 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
       >
         <BaseNode
           id={id}
-          data={nodeData}
+          data={data}
           style={baseNodeStyle}
           isCollapsed={isCollapsed}
           setIsCollapsed={setIsCollapsed}
-          selected={props.selected}
           handleOpenModal={setIsModalOpen}
           className="hover:!bg-background"
         >
@@ -441,15 +390,14 @@ const DynamicNode: React.FC<DynamicNodeProps> = ({ id, type, data, position, dis
             ) : null}
             {renderHandles()}
           </div>
-          {displayOutput && <NodeOutputDisplay output={nodeData.run} />}
+          {displayOutput && nodeData?.run && <NodeOutputDisplay output={nodeData.run} />}
         </BaseNode>
       </div>
       <NodeOutputModal
         isOpen={isModalOpen}
         onOpenChange={setIsModalOpen}
-        title={data?.config?.title || data?.title || 'Node Output'}
+        title={data.title || 'Node Output'}
         node={node}
-        data={nodeData}
       />
     </>
   );

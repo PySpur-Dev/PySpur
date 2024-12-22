@@ -7,7 +7,7 @@ import { persistor } from '../../store/store';
 import { useDispatch } from 'react-redux';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { fetchNodeTypes } from '../../store/nodeTypesSlice';
-import { setTestInputs } from '../../store/flowSlice';
+import { setTestInputs } from '../../store/canvasSlice';
 import { getRunStatus } from '../../utils/api';
 import { AppDispatch } from '../../store/store';
 import { rolloutWorkflowDefinition } from '../../utils/subworkflowUtils';
@@ -22,7 +22,7 @@ const TracePage: React.FC = () => {
   const [runData, setRunData] = useState<RunResponse | null>(null);
   const [nodeOutputs, setNodeOutputs] = useState<Record<string, any>>({});
   const [workflowId, setWorkflowId] = useState<string | null>(null);
-  const [workflowData, setWorkflowData] = useState<{name: string, definition: WorkflowDefinition} | null>(null);
+  const [workflowData, setWorkflowData] = useState<{ name: string, definition: WorkflowDefinition } | null>(null);
 
   useEffect(() => {
     dispatch(fetchNodeTypes());
@@ -36,21 +36,21 @@ const TracePage: React.FC = () => {
 
         if (data.workflow_version?.definition) {
           dispatch(setTestInputs(data.workflow_version.definition.test_inputs));
-          
+
           // Roll out the workflow definition if tasks are available
-          const {rolledOutDefinition, outputs} = data.tasks ? 
+          const { rolledOutDefinition, outputs } = data.tasks ?
             rolloutWorkflowDefinition({
               workflowDefinition: data.workflow_version.definition,
               tasks: data.tasks
             }) :
-            {rolledOutDefinition: data.workflow_version.definition, outputs: data.outputs};
-          
+            { rolledOutDefinition: data.workflow_version.definition, outputs: data.outputs };
+
           console.log('coalesced outputs:', outputs);
           setWorkflowData({
             name: data.workflow_version.name,
             definition: rolledOutDefinition,
           });
-          
+
           if (outputs) {
             setNodeOutputs(outputs);
           }

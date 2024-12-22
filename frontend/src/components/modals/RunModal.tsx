@@ -18,7 +18,7 @@ import {
 } from "@nextui-org/react";
 import { Icon } from "@iconify/react";
 import TextEditor from '../textEditor/TextEditor';
-import { addTestInput, deleteTestInput } from '../../store/flowSlice';
+import { addTestInput, deleteTestInput } from '../../store/canvasSlice';
 import { RootState } from '../../store/store';
 import { AppDispatch } from '../../store/store';
 import { TestInput } from '@/types/api_types/workflowSchemas';

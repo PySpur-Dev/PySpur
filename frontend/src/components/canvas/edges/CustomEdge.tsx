@@ -12,7 +12,7 @@ import {
 import { Button } from '@nextui-org/react';
 import { Icon } from "@iconify/react";
 import { useDispatch } from 'react-redux';
-import { deleteEdge } from '../../../store/flowSlice';
+import { deleteEdge } from '../../../store/canvasSlice';
 
 // Static styles
 const staticStyles = {

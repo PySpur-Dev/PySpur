@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useKeyPress, getConnectedEdges } from '@xyflow/react';
-import { setNodes, setEdges } from '../store/flowSlice';
+import { setNodes, setEdges } from '../store/canvasSlice';
 import type { RootState } from '../store/store'; // Assuming you have a RootState type for Redux
 import type { Node, Edge } from '@xyflow/react'; // Assuming these types are provided by the library
 

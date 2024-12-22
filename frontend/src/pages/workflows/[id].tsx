@@ -8,7 +8,7 @@ import { getWorkflow } from '../../utils/api';
 import { useDispatch } from 'react-redux';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { fetchNodeTypes } from '../../store/nodeTypesSlice';
-import { setTestInputs } from '../../store/flowSlice';
+import { setTestInputs } from '../../store/canvasSlice';
 import { AppDispatch } from '../../store/store';
 
 // Use dynamic import for FlowCanvas to avoid SSR issues

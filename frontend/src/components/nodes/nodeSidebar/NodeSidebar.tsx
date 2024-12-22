@@ -9,7 +9,7 @@ import {
   setSelectedNode,
   FlowWorkflowNode,
   updateNodeTitle,
-} from '../../../store/flowSlice';
+} from '../../../store/canvasSlice';
 import NumberInput from '../../NumberInput';
 import CodeEditor from '../../CodeEditor';
 import { jsonOptions } from '../../../constants/jsonOptions';

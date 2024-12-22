@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { getRunStatus, startRun, getWorkflow } from '../utils/api';
-import { updateNodeData, setProjectName } from '../store/flowSlice';
+import { updateNodeData, setProjectName } from '../store/canvasSlice';
 import { RootState } from '../store/store';
 import { Node, NodeData, RunOutputData, RunOutputs, RunStatusResponse } from '../types';
 
 // Import clearCanvas from flowSlice
-import { clearCanvas } from '../store/flowSlice';
+import { clearCanvas } from '../store/canvasSlice';
 
 const useWorkflow = () => {
     const dispatch = useDispatch();

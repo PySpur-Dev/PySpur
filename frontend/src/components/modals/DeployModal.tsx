@@ -14,7 +14,7 @@ import {
 import { Icon } from "@iconify/react";
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-import { FlowState } from '@/store/flowSlice';
+import { FlowState } from '@/store/canvasSlice';
 
 interface DeployModalProps {
   isOpen: boolean;

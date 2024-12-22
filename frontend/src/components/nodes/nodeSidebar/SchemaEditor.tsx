@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button, Input, Select, SelectItem } from '@nextui-org/react';
 import { Icon } from '@iconify/react';
 import { useDispatch } from 'react-redux';
-import { deleteEdgeByHandle, updateEdgesOnHandleRename } from '../../../store/flowSlice';
+import { deleteEdgeByHandle, updateEdgesOnHandleRename } from '../../../store/canvasSlice';
 
 interface SchemaEditorProps {
   jsonValue?: Record<string, string>;

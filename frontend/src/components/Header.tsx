@@ -17,7 +17,9 @@ import {
 } from "@nextui-org/react";
 import { Icon } from "@iconify/react";
 import SettingsCard from './modals/SettingsModal';
-import { setProjectName, updateNodeData, resetRun } from '../store/flowSlice';
+import { setProjectName } from '../store/canvasSlice';
+import { setNodeRunData, setNodeTaskStatus, NodeConfigData } from '../store/nodeDataSlice';
+import { CanvasNode, CanvasEdge } from '../store/canvasSlice';
 import RunModal from './modals/RunModal';
 import { getRunStatus, startRun, getWorkflow } from '../utils/api';
 import { Toaster, toast } from 'sonner'
@@ -26,19 +28,12 @@ import { useRouter } from 'next/router';
 import DeployModal from './modals/DeployModal';
 import { formatDistanceStrict } from 'date-fns';
 import { useHotkeys } from 'react-hotkeys-hook';
+import { RootState } from '../store/store';
 
 interface HeaderProps {
   activePage: 'home' | 'workflow' | 'evals' | 'trace';
 }
 
-interface Node {
-  id: string;
-  data: {
-    run?: Record<string, any>;
-  };
-}
-
-import { RootState } from '../store/store';
 interface AlertState {
   message: string;
   color: "default" | "primary" | "secondary" | "success" | "warning" | "danger";
@@ -47,17 +42,18 @@ interface AlertState {
 
 const Header: React.FC<HeaderProps> = ({ activePage }) => {
   const dispatch = useDispatch();
-  const nodes = useSelector((state: RootState) => state.flow.nodes);
-  const projectName = useSelector((state: RootState) => state.flow.projectName);
+  const nodes = useSelector((state: RootState) => state.canvas.nodes);
+  const projectName = useSelector((state: RootState) => state.canvas.projectName);
+  const workflowId = useSelector((state: RootState) => state.canvas.workflowId);
+  const nodeDataById = useSelector((state: RootState) => state.nodeData.nodeDataById);
+  const testInputs = useSelector((state: RootState) => state.canvas.testInputs || []);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isDebugModalOpen, setIsDebugModalOpen] = useState<boolean>(false);
   const [isDeployModalOpen, setIsDeployModalOpen] = useState<boolean>(false);
   const [workflowRuns, setWorkflowRuns] = useState<any[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
-  const workflowId = useSelector((state: RootState) => state.flow.workflowID);
   const [alert, setAlert] = useState<AlertState>({ message: '', color: 'default', isVisible: false });
-  const testInputs = useSelector((state: RootState) => state.flow.testInputs);
-  const [selectedRow, setSelectedRow] = useState<number | null>(null);
+  const [selectedRow, setSelectedRow] = useState<string | null>(null);
 
   const router = useRouter();
   const { id } = router.query;
@@ -85,7 +81,7 @@ const Header: React.FC<HeaderProps> = ({ activePage }) => {
     if (testInputs.length > 0 && !selectedRow) {
       setSelectedRow(testInputs[0].id);
     }
-  }, [testInputs]);
+  }, [testInputs, selectedRow]);
 
   const showAlert = (message: string, color: AlertState['color']) => {
     setAlert({ message, color, isVisible: true });
@@ -112,25 +108,19 @@ const Header: React.FC<HeaderProps> = ({ activePage }) => {
         if (tasks.length > 0) {
           tasks.forEach((task) => {
             const nodeId = task.node_id;
-            let node = nodes.find(node => node.id === nodeId);
-            if (!node) {
-              node = nodes.find(node => node.data?.config?.title === task.node_id);
-            }
-            if (!node) {
-              return;
-            }
             const output_values = task.outputs || {};
             const nodeTaskStatus = task.status;
-            if (node) {
-              // Check if the task output or status is different from current node data
-              const isOutputDifferent = JSON.stringify(output_values) !== JSON.stringify(node.data?.run);
-              const isStatusDifferent = nodeTaskStatus !== node.data?.taskStatus;
 
-              console.log('Node:', node.id, 'Output:', output_values, 'Status:', nodeTaskStatus, 'isOutputDifferent:', isOutputDifferent, 'isStatusDifferent:', isStatusDifferent);
-              
-              if (isOutputDifferent || isStatusDifferent) {
-                dispatch(updateNodeData({ id: node.id, data: { run: { ...node.data.run, ...output_values }, taskStatus: nodeTaskStatus } }));
-              }
+            // Check if the task output or status is different from current node data
+            const currentNodeData = nodeDataById[nodeId];
+            const isOutputDifferent = JSON.stringify(output_values) !== JSON.stringify(currentNodeData?.run);
+            const isStatusDifferent = nodeTaskStatus !== currentNodeData?.taskStatus;
+
+            if (isOutputDifferent) {
+              dispatch(setNodeRunData({ nodeId, runData: output_values }));
+            }
+            if (isStatusDifferent) {
+              dispatch(setNodeTaskStatus({ nodeId, status: nodeTaskStatus }));
             }
           });
         }
@@ -159,7 +149,6 @@ const Header: React.FC<HeaderProps> = ({ activePage }) => {
       const result = await startRun(workflowId, inputValues, null, 'interactive');
       setIsRunning(true);
       fetchWorkflowRuns();
-      dispatch(resetRun());
       updateWorkflowStatus(result.id);
     } catch (error) {
       console.error('Error starting workflow run:', error);
@@ -233,7 +222,7 @@ const Header: React.FC<HeaderProps> = ({ activePage }) => {
     (e) => {
       e.preventDefault();
       console.log('Run workflow');
-      
+
       if (testInputs.length === 0) {
         setIsDebugModalOpen(true);
         return;
@@ -241,7 +230,7 @@ const Header: React.FC<HeaderProps> = ({ activePage }) => {
 
       const testCase = testInputs.find(row => row.id === selectedRow)
         ?? testInputs[0];
-      
+
       if (testCase) {
         const { id, ...inputValues } = testCase;
         const inputNodeId = nodes.find(node => node.type === 'InputNode')?.id;
@@ -254,7 +243,7 @@ const Header: React.FC<HeaderProps> = ({ activePage }) => {
         }
       }
     },
-    { 
+    {
       enableOnFormTags: true,
       enabled: activePage === 'workflow'
     }
@@ -290,10 +279,7 @@ const Header: React.FC<HeaderProps> = ({ activePage }) => {
           ],
         }}
       >
-        <NavbarBrand
-          justify="start"
-          className="h-12 max-w-fit"
-        >
+        <NavbarBrand className="h-12 max-w-fit">
           {activePage === "home" ? (
             <p className="font-bold text-inherit cursor-pointer">PySpur</p>
           ) : (

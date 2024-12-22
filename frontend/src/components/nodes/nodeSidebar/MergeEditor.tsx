@@ -3,7 +3,7 @@ import { Card, Button } from '@nextui-org/react';
 import { Icon } from '@iconify/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../../store/store';
-import { deleteEdgesBySource } from '../../../store/flowSlice';
+import { deleteEdgesBySource } from '../../../store/canvasSlice';
 
 interface MergeEditorProps {
   branchRefs: string[];

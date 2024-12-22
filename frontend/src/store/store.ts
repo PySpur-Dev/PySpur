@@ -1,16 +1,28 @@
 import { combineReducers, configureStore } from '@reduxjs/toolkit';
 import { persistStore, persistReducer } from 'redux-persist';
 import storage from 'redux-persist/lib/storage';
-import flowReducer from './flowSlice';
-import { FlowState } from './flowSlice';
+import canvasReducer from './canvasSlice';
+import { CanvasNode, CanvasEdge } from './canvasSlice';
 import nodeTypesReducer from './nodeTypesSlice';
+import nodeDataReducer, { NodeConfigData } from './nodeDataSlice';
 import userPreferencesReducer from './userPreferencesSlice';
 import panelReducer from './panelSlice';
-import type { Node, Edge } from '@xyflow/react';
 
 // Define the RootState type
 export interface RootState {
-  flow: FlowState;
+  canvas: {
+    nodes: CanvasNode[];
+    edges: CanvasEdge[];
+    selectedNodeId: string | null;
+    workflowId: string | null;
+    projectName: string;
+    sidebarWidth: number;
+  };
+  nodeData: {
+    nodeDataById: {
+      [nodeId: string]: NodeConfigData;
+    };
+  };
   nodeTypes: {
     data: Record<string, any>;
   };
@@ -26,11 +38,12 @@ export interface RootState {
 const persistConfig = {
   key: 'root',
   storage,
-  whitelist: ['nodes', 'edges', 'nodeTypes', 'userPreferences'],
+  whitelist: ['canvas', 'nodeData', 'nodeTypes', 'userPreferences'],
 };
 
 const rootReducer = combineReducers({
-  flow: flowReducer,
+  canvas: canvasReducer,
+  nodeData: nodeDataReducer,
   nodeTypes: nodeTypesReducer,
   userPreferences: userPreferencesReducer,
   panel: panelReducer,

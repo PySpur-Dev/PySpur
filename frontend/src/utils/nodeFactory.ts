@@ -1,4 +1,5 @@
-import { FlowWorkflowNode } from '@/store/flowSlice';
+import { CanvasNode } from '@/store/canvasSlice';
+import { NodeConfigData } from '@/store/nodeDataSlice';
 import cloneDeep from 'lodash/cloneDeep';
 
 // Define types for the node structure
@@ -9,12 +10,6 @@ interface NodeType {
     color: string;
   };
   config: Record<string, any>;
-  input?: {
-    properties: Record<string, any>;
-  };
-  output?: {
-    properties: Record<string, any>;
-  };
 }
 
 interface NodeTypes {
@@ -26,25 +21,13 @@ interface Position {
   y: number;
 }
 
-interface AdditionalData {
-  input?: {
-    properties?: Record<string, any>;
-  };
-  output?: {
-    properties?: Record<string, any>;
-  };
-  [key: string]: any;
-}
-
-
 // Function to create a node based on its type
 export const createNode = (
   nodeTypes: NodeTypes,
   type: string,
   id: string,
   position: Position,
-  additionalData: AdditionalData = {}
-): FlowWorkflowNode | null => {
+): { canvasNode: CanvasNode | null; configData: NodeConfigData | null } => {
   let nodeType: NodeType | null = null;
 
   for (const category in nodeTypes) {
@@ -55,17 +38,11 @@ export const createNode = (
     }
   }
   if (!nodeType) {
-    return null;
+    return { canvasNode: null, configData: null };
   }
 
-  let processedAdditionalData = cloneDeep(additionalData);
-  let config = cloneDeep(nodeType.config);
-  config = {
-    ...config,
-    title: id,
-  };
-
-  const node: FlowWorkflowNode = {
+  // Create minimal visual node
+  const canvasNode: CanvasNode = {
     id,
     type: nodeType.name,
     position,
@@ -73,9 +50,16 @@ export const createNode = (
       title: id,
       acronym: nodeType.visual_tag.acronym,
       color: nodeType.visual_tag.color,
-      config: config,
-      ...processedAdditionalData,
     },
   };
-  return node;
+
+  // Create config data
+  const configData: NodeConfigData = {
+    config: {
+      ...cloneDeep(nodeType.config),
+      title: id,
+    }
+  };
+
+  return { canvasNode, configData };
 };

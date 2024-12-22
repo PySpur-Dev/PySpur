@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import TextEditor from './TextEditor';
-import { updateNodeData } from '../../store/flowSlice';
+import { updateNodeData } from '../../store/canvasSlice';
 import { Button, Tabs, Tab } from "@nextui-org/react";
 import _ from 'lodash';
 import { RootState } from '../../store/store';

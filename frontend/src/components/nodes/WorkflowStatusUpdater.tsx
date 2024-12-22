@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { updateNodeData } from '../../store/flowSlice';
+import { updateNodeData } from '../../store/canvasSlice';
 import { getRunStatus } from '../../utils/api';
 
 interface NodeStatus {

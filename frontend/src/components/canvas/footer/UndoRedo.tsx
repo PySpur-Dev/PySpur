@@ -4,7 +4,7 @@ import { Button } from '@nextui-org/react'
 import { Icon } from "@iconify/react"
 import { useDispatch, useSelector } from 'react-redux'
 import { useHotkeys } from 'react-hotkeys-hook'
-import { undo, redo } from '../../../store/flowSlice'
+import { undo, redo } from '../../../store/canvasSlice'
 import { RootState } from '../../../store/store'
 import TipPopup from './TipPopUp'
 
