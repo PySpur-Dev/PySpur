@@ -1,86 +1,52 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
-import dynamic from 'next/dynamic';
-import Header from '../../components/Header';
-import { PersistGate } from 'redux-persist/integration/react';
-import { persistor } from '../../store/store';
-import { getWorkflow } from '../../utils/api';
 import { useDispatch } from 'react-redux';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import { fetchNodeTypes } from '../../store/nodeTypesSlice';
-import { setTestInputs } from '../../store/canvasSlice';
-import { AppDispatch } from '../../store/store';
+import { getWorkflow } from '../../utils/api';
+import { initializeCanvas, setProjectName } from '../../store/canvasSlice';
+import { setTestInputs, TestInput } from '../../store/nodeDataSlice';
+import WorkflowPage from '../../components/pages/WorkflowPage';
+import { v4 as uuidv4 } from 'uuid';
 
-// Use dynamic import for FlowCanvas to avoid SSR issues
-const FlowCanvas = dynamic(() => import('../../components/canvas/FlowCanvas'), {
-  ssr: false,
-});
-
-interface WorkflowNode {
-  id: string;
-  node_type: string;
-  config: any;
-  coordinates: {
-    x: number;
-    y: number;
-  };
-}
-
-interface WorkflowLink {
-  source_id: string;
-  target_id: string;
-}
-interface WorkflowData {
-  id: string;
-  definition: {
-    test_inputs?: Record<string, any>;
-    nodes: WorkflowNode[];
-    links: WorkflowLink[];
-  };
-  // Add other workflow properties as needed
-}
-
-const WorkflowPage: React.FC = () => {
-  const dispatch = useDispatch<AppDispatch>();
+const WorkflowDetailPage = () => {
   const router = useRouter();
   const { id } = router.query;
-  const [workflowData, setWorkflowData] = useState<WorkflowData | null>(null);
+  const dispatch = useDispatch();
 
   useEffect(() => {
-    dispatch(fetchNodeTypes());
     const fetchWorkflow = async () => {
-      try {
-        if (typeof id !== 'string') return;
-        const data = await getWorkflow(id);
-        setWorkflowData(data);
+      if (!id) return;
 
+      try {
+        const data = await getWorkflow(id as string);
+
+        // Initialize canvas with workflow data
+        dispatch(initializeCanvas({
+          workflowId: id as string,
+          definition: data.definition,
+          name: data.name,
+          nodeTypes: {} // This will be handled by the nodeTypes slice
+        }));
+
+        // Set project name
+        dispatch(setProjectName(data.name));
+
+        // Convert and set test inputs if they exist
         if (data.definition?.test_inputs) {
-          dispatch(setTestInputs(data.definition.test_inputs));
+          const storeTestInputs: TestInput[] = data.definition.test_inputs.map(input => ({
+            ...input,
+            id: typeof input.id === 'number' ? input.id.toString() : input.id
+          }));
+          dispatch(setTestInputs(storeTestInputs));
         }
       } catch (error) {
         console.error('Error fetching workflow:', error);
       }
     };
 
-    if (id) {
-      fetchWorkflow();
-    }
+    fetchWorkflow();
   }, [id, dispatch]);
 
-  if (!workflowData) {
-    return <LoadingSpinner />;
-  }
-
-  return (
-    <PersistGate loading={null} persistor={persistor}>
-      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <Header activePage="workflow" />
-        <div style={{ flexGrow: 1 }}>
-          <FlowCanvas workflowData={workflowData} workflowID={id as string} />
-        </div>
-      </div>
-    </PersistGate>
-  );
+  return <WorkflowPage />;
 };
 
-export default WorkflowPage;
+export default WorkflowDetailPage;

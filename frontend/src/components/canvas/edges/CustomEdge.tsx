@@ -1,157 +1,77 @@
-import React, { useCallback, useMemo } from 'react';
-import {
-  BaseEdge,
-  EdgeLabelRenderer,
-  getBezierPath,
-  useReactFlow,
-  Edge,
-  Node,
-  Position,
-  EdgeProps
-} from '@xyflow/react';
-import { Button } from '@nextui-org/react';
+import React, { useState } from 'react';
+import { EdgeProps, getStraightPath, useReactFlow } from '@xyflow/react';
+import { Button } from "@nextui-org/react";
 import { Icon } from "@iconify/react";
 import { useDispatch } from 'react-redux';
-import { deleteEdge } from '../../../store/canvasSlice';
+import { deleteCanvasEdge } from '../../../store/canvasSlice';
 
 // Static styles
 const staticStyles = {
-  labelContainer: {
+  path: {
+    stroke: '#b1b1b7',
+    strokeWidth: 2,
+    fill: 'none',
+  },
+  button: {
     position: 'absolute' as const,
+    transform: 'translate(-50%, -50%)',
     pointerEvents: 'all' as const,
   },
-  buttonContainer: {
-    display: 'flex',
-    gap: '5px',
-    justifyContent: 'center',
-    alignItems: 'center',
-  }
-} as const;
+};
 
-// Add this near the other static styles
-const defaultEdgeStyle = {
-  strokeWidth: 2,
-  stroke: '#555',
-} as const;
-
-interface CustomEdgeData {
-  onPopoverOpen: (params: {
-    sourceNode: {
-      id: string;
-      position: { x: number; y: number };
-      data: any;
-    };
-    targetNode: {
-      id: string;
-      position: { x: number; y: number };
-      data: any;
-    };
-    edgeId: string;
-  }) => void;
-  showPlusButton: boolean;
-}
-
-type CustomEdgeProps = EdgeProps<CustomEdgeData>;
-
-const CustomEdge: React.FC<CustomEdgeProps> = ({
+const CustomEdge: React.FC<EdgeProps> = ({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
   targetY,
-  sourcePosition,
-  targetPosition,
-  style = {},
-  data,
-  markerEnd,
-  source,
-  target,
+  selected,
 }) => {
-  const { onPopoverOpen, showPlusButton } = data;
-  const reactFlowInstance = useReactFlow();
-  const dispatch = useDispatch();
-
-  // Get the full node objects
-  const sourceNode = reactFlowInstance.getNode(source);
-  const targetNode = reactFlowInstance.getNode(target);
-
-  // Memoize the path calculation
-  const [edgePath, labelX, labelY] = useMemo(() => getBezierPath({
+  const [edgePath, labelX, labelY] = getStraightPath({
     sourceX,
     sourceY,
-    sourcePosition,
     targetX,
     targetY,
-    targetPosition,
-  }), [sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition]);
+  });
 
-  // Memoize the label style
-  const labelStyle = useMemo(() => ({
-    ...staticStyles.labelContainer,
-    transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-  }), [labelX, labelY]);
+  const [isHovered, setIsHovered] = useState(false);
+  const dispatch = useDispatch();
 
-  // Memoize handlers
-  const handleAddNode = useCallback(() => {
-    if (!sourceNode || !targetNode) {
-      console.error('Source or target node not found');
-      return;
-    }
-    onPopoverOpen({
-      sourceNode: {
-        id: sourceNode.id,
-        position: sourceNode.position,
-        data: sourceNode.data
-      },
-      targetNode: {
-        id: targetNode.id,
-        position: targetNode.position,
-        data: targetNode.data
-      },
-      edgeId: id
-    });
-  }, [sourceNode, targetNode, id, onPopoverOpen]);
-
-  const handleDeleteEdge = useCallback((event: React.MouseEvent) => {
-    event.stopPropagation();
-    dispatch(deleteEdge({ edgeId: id }));
-  }, [id, dispatch]);
-
-  // Memoize the combined edge style
-  const combinedStyle = useMemo(() => ({
-    ...defaultEdgeStyle,
-    ...style
-  }), [JSON.stringify(style)]);
+  const handleDelete = () => {
+    dispatch(deleteCanvasEdge(id));
+  };
 
   return (
     <>
-      <BaseEdge path={edgePath} markerEnd={markerEnd} style={combinedStyle} />
-
-      {showPlusButton && (
-        <EdgeLabelRenderer>
-          <div
-            style={labelStyle}
-            className="nodrag nopan"
-          >
-            <div style={staticStyles.buttonContainer}>
-              <Button
-                isIconOnly
-                onClick={handleAddNode}
-              >
-                <Icon icon="solar:add-circle-linear" width={20} className="text-default-500" />
-              </Button>
-              <Button
-                isIconOnly
-                onClick={handleDeleteEdge}
-              >
-                <Icon icon="solar:trash-bin-trash-linear" width={20} />
-              </Button>
-            </div>
-          </div>
-        </EdgeLabelRenderer>
+      <path
+        id={id}
+        style={staticStyles.path}
+        d={edgePath}
+        className={`${selected || isHovered ? '!stroke-primary' : ''} transition-colors`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      />
+      {(selected || isHovered) && (
+        <Button
+          isIconOnly
+          size="sm"
+          variant="light"
+          radius="full"
+          style={{
+            ...staticStyles.button,
+            left: labelX,
+            top: labelY,
+          }}
+          onPress={handleDelete}
+          className="bg-background"
+        >
+          <Icon icon="solar:close-circle-bold-duotone" className="text-danger" width={20} />
+        </Button>
       )}
     </>
   );
 };
 
-export default React.memo(CustomEdge);
+export default CustomEdge;

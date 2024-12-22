@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import {
   Modal,
   ModalContent,
@@ -7,294 +7,168 @@ import {
   ModalBody,
   ModalFooter,
   Button,
+  Input,
+  Tabs,
+  Tab,
+  Card,
+  CardBody,
   Table,
   TableHeader,
   TableColumn,
   TableBody,
   TableRow,
   TableCell,
-  Input,
-  Tooltip
+  useDisclosure,
 } from "@nextui-org/react";
-import { Icon } from "@iconify/react";
-import TextEditor from '../textEditor/TextEditor';
-import { addTestInput, deleteTestInput } from '../../store/canvasSlice';
+import { Icon } from '@iconify/react';
 import { RootState } from '../../store/store';
-import { AppDispatch } from '../../store/store';
-import { TestInput } from '@/types/api_types/workflowSchemas';
-import { useSaveWorkflow } from '../../hooks/useSaveWorkflow';
+import { v4 as uuidv4 } from 'uuid';
+import { TestInput } from '../../store/nodeDataSlice';
 
 interface RunModalProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onRun: (initialInputs: Record<string, any>) => void;
-  onSave?: () => void;
-}
-
-interface EditingCell {
-  rowId: number;
-  field: string;
+  onRun?: (inputValues: Record<string, any>) => void;
+  onSave?: (testCase: TestInput) => void;
 }
 
 const RunModal: React.FC<RunModalProps> = ({ isOpen, onOpenChange, onRun, onSave }) => {
-  const nodes = useSelector((state: RootState) => state.flow.nodes);
+  const nodes = useSelector((state: RootState) => state.canvas.nodes);
+  const testInputs = useSelector((state: RootState) => state.nodeData.testInputs || []);
   const inputNode = nodes.find(node => node.type === 'InputNode');
-  const workflowInputVariables = inputNode?.data?.config?.output_schema || {};
+  const nodeData = useSelector((state: RootState) => state.nodeData.nodeDataById[inputNode?.id || '']);
+  const workflowInputVariables = nodeData?.config?.output_schema || {};
   const workflowInputVariableNames = Object.keys(workflowInputVariables);
 
-  const [testData, setTestData] = useState<TestInput[]>([]);
-  const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
+  const [selectedTab, setSelectedTab] = useState<string>("debug");
+  const [inputValues, setInputValues] = useState<Record<string, any>>({});
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
-  const [editorContents, setEditorContents] = useState<Record<string, string>>({});
-
-  const dispatch = useDispatch<AppDispatch>();
-  const edges = useSelector((state: RootState) => state.flow.edges);
-  const testInputs = useSelector((state: RootState) => state.flow.testInputs);
-  const saveWorkflow = useSaveWorkflow();
 
   useEffect(() => {
-    setTestData(testInputs);
-  }, [testInputs]);
-
-  useEffect(() => {
-    if (testData.length > 0 && !selectedRow) {
-      setSelectedRow(testData[0].id.toString());
+    if (testInputs.length > 0 && !selectedRow) {
+      setSelectedRow(testInputs[0].id);
     }
-  }, [testData]);
+  }, [testInputs, selectedRow]);
 
-  useEffect(() => {
-    if (isOpen && testData.length > 0) {
-      setSelectedRow(testData[0].id.toString());
-    }
-  }, [isOpen, testData]);
-
-  const handleAddRow = () => {
-    const newTestInput: TestInput = {
-      id: Date.now(),
-      ...editorContents,
-    };
-    setTestData([...testData, newTestInput]);
-    setEditorContents({});
-    dispatch(addTestInput(newTestInput));
-    saveWorkflow();
-  };
-
-  const handleDeleteRow = (id: number) => {
-    setTestData(testData.filter((row) => row.id !== id));
-    dispatch(deleteTestInput({ id }));
-    saveWorkflow();
-  };
-
-  const handleDoubleClick = (rowId: number, field: string) => {
-    setEditingCell({ rowId, field });
-  };
-
-  const handleCellEdit = (rowId: number, field: string, value: string) => {
-    setTestData(testData.map(row =>
-      row.id === rowId ? { ...row, [field]: value } : row
-    ));
-  };
-
-  const handleBlur = () => {
-    setEditingCell(null);
-  };
-
-  const renderCell = (row: TestInput, field: string) => {
-    const isEditing = editingCell?.rowId === row.id && editingCell?.field === field;
-    const content = row[field];
-
-    if (isEditing) {
-      return (
-        <div onClick={(e) => e.stopPropagation()}>
-          <Input
-            autoFocus
-            size="sm"
-            defaultValue={content}
-            onBlur={(e) => {
-              handleCellEdit(row.id, field, e.target.value);
-              handleBlur();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                handleCellEdit(row.id, field, e.currentTarget.value);
-                handleBlur();
-              }
-            }}
-            endContent={
-              <Button
-                isIconOnly
-                size="sm"
-                variant="light"
-                color="success"
-                onPress={handleBlur}
-              >
-                <Icon icon="material-symbols:check" />
-              </Button>
-            }
-          />
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-        <Tooltip content={content} showArrow={true}>
-          <span className="max-w-[200px] truncate">{content}</span>
-        </Tooltip>
-        <Button
-          isIconOnly
-          size="sm"
-          variant="light"
-          onPress={() => handleDoubleClick(row.id, field)}
-        >
-          <Icon icon="solar:pen-linear" />
-        </Button>
-      </div>
-    );
+  const handleInputChange = (key: string, value: string) => {
+    setInputValues(prev => ({
+      ...prev,
+      [key]: value
+    }));
   };
 
   const handleRun = () => {
-    if (!selectedRow) return;
-
-    const selectedTestCase = testData.find(row => row.id.toString() === selectedRow);
-    if (!selectedTestCase) return;
-
-    const { id, ...inputValues } = selectedTestCase;
-    const inputNodeId = nodes.find(node => node.type === 'InputNode')?.id;
-
-    if (!inputNodeId) return;
-
-    const initialInputs = {
-      [inputNodeId]: inputValues
-    };
-
-    onRun(initialInputs);
+    if (onRun) {
+      if (selectedTab === "debug") {
+        onRun(inputValues);
+      } else if (selectedRow) {
+        const testCase = testInputs.find(input => input.id === selectedRow);
+        if (testCase) {
+          const { id, ...values } = testCase;
+          onRun(values);
+        }
+      }
+    }
+    onOpenChange(false);
   };
 
   const handleSave = () => {
-    if (typeof onSave === 'function') {
-      onSave();
+    if (onSave) {
+      const testCase: TestInput = {
+        id: uuidv4(),
+        ...inputValues
+      };
+      onSave(testCase);
     }
-    onOpenChange(false);
+    setInputValues({});
+  };
+
+  const handleRowClick = (id: string) => {
+    setSelectedRow(id);
   };
 
   return (
     <Modal
       isOpen={isOpen}
       onOpenChange={onOpenChange}
+      size="2xl"
+      scrollBehavior="inside"
       classNames={{
-        base: "max-w-[95vw] w-[1400px]"
+        base: "bg-background",
       }}
     >
       <ModalContent>
         {(onClose) => (
           <>
             <ModalHeader className="flex flex-col gap-1">
-              Select Test Input To Run or Save
+              Run Workflow
             </ModalHeader>
             <ModalBody>
-              <div className="overflow-x-auto">
-                <Table
-                  aria-label="Test cases table"
-                  selectionMode="single"
-                  disabledKeys={editingCell ? new Set([editingCell.rowId.toString()]) : new Set()}
-                  selectedKeys={selectedRow ? [selectedRow] : new Set()}
-                  onSelectionChange={(selection) => {
-                    const selectedKey = Array.from(selection)[0]?.toString() || null;
-                    setSelectedRow(selectedKey);
-                  }}
-                  classNames={{
-                    base: "min-w-[800px]",
-                    table: "min-w-full",
-                  }}
-                >
-                  <TableHeader>
-                    {
-                      [
-                        <TableColumn key="id">ID</TableColumn>,
-                        ...workflowInputVariableNames.map(field => (
-                          <TableColumn key={field}>{field}</TableColumn>
-                        )),
-                        <TableColumn key="actions">Actions</TableColumn>
-                      ]
-                    }
-                  </TableHeader>
-                  <TableBody>
-                    {testData.map((row) => (
-                      <TableRow key={row.id}>
-                        {
-                          [
-                            <TableCell key="id">{row.id}</TableCell>,
-                            ...workflowInputVariableNames.map(field => (
-                              <TableCell key={field}>
-                                {renderCell(row, field)}
-                              </TableCell>
-                            )),
-                            <TableCell key="actions">
-                              <Button
-                                isIconOnly
-                                size="sm"
-                                variant="light"
-                                onPress={() => handleDeleteRow(row.id)}
-                              >
-                                <Icon icon="solar:trash-bin-trash-linear" />
-                              </Button>
-                            </TableCell>
-                          ]
-                        }
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="flex gap-2 overflow-x-auto">
-                {workflowInputVariableNames.map(field => (
-                  <div key={field} className="w-[300px] min-w-[300px]">
-                    <TextEditor
-                      nodeID={`newRow-${field}`}
-                      fieldName={field}
-                      fieldTitle={field}
-                      inputSchema={[]}
-                      content={editorContents[field] || ''}
-                      setContent={(value: string) => {
-                        setEditorContents(prev => ({
-                          ...prev,
-                          [field]: value
-                        }));
-                      }}
-                    />
-                  </div>
-                ))}
-                <div className="flex-none">
-                  <Button
-                    color="primary"
-                    onPress={handleAddRow}
-                    isDisabled={Object.values(editorContents).every(v => !v?.trim())}
-                  >
-                    Add Row
-                  </Button>
-                </div>
-              </div>
+              <Tabs
+                selectedKey={selectedTab}
+                onSelectionChange={(key) => setSelectedTab(key.toString())}
+                aria-label="Run options"
+              >
+                <Tab key="debug" title="Debug">
+                  <Card>
+                    <CardBody>
+                      {workflowInputVariableNames.map((key) => (
+                        <div key={key} className="mb-4">
+                          <Input
+                            label={key}
+                            value={inputValues[key] || ''}
+                            onChange={(e) => handleInputChange(key, e.target.value)}
+                            variant="bordered"
+                          />
+                        </div>
+                      ))}
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          color="primary"
+                          variant="flat"
+                          onPress={handleSave}
+                          startContent={<Icon icon="solar:save-line-duotone" />}
+                        >
+                          Save Test Case
+                        </Button>
+                      </div>
+                    </CardBody>
+                  </Card>
+                </Tab>
+                <Tab key="test" title="Test Cases">
+                  <Card>
+                    <CardBody>
+                      <Table
+                        aria-label="Test cases"
+                        selectionMode="single"
+                        selectedKeys={selectedRow ? [selectedRow] : []}
+                        onRowAction={handleRowClick}
+                      >
+                        <TableHeader>
+                          {workflowInputVariableNames.map((key) => (
+                            <TableColumn key={key}>{key}</TableColumn>
+                          ))}
+                        </TableHeader>
+                        <TableBody>
+                          {testInputs.map((testCase) => (
+                            <TableRow key={testCase.id}>
+                              {workflowInputVariableNames.map((key) => (
+                                <TableCell key={key}>{testCase[key]}</TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardBody>
+                  </Card>
+                </Tab>
+              </Tabs>
             </ModalBody>
             <ModalFooter>
               <Button color="danger" variant="light" onPress={onClose}>
-                Cancel
+                Close
               </Button>
-              <Button
-                color="primary"
-                onPress={handleSave}
-              >
-                Save
-              </Button>
-              <Button
-                color="primary"
-                onPress={() => {
-                  handleRun();
-                  onClose();
-                }}
-                isDisabled={!selectedRow}
-              >
+              <Button color="primary" onPress={handleRun}>
                 Run
               </Button>
             </ModalFooter>

@@ -1,39 +1,47 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { getRunStatus, startRun, getWorkflow } from '../utils/api';
-import { updateNodeData, setProjectName } from '../store/canvasSlice';
+import { clearCanvas, setProjectName } from '../store/canvasSlice';
+import { setNodeRunData, setNodeTaskStatus } from '../store/nodeDataSlice';
 import { RootState } from '../store/store';
-import { Node, NodeData, RunOutputData, RunOutputs, RunStatusResponse } from '../types';
+import { TaskResponse, TaskStatus } from '../types/api_types/taskSchemas';
 
-// Import clearCanvas from flowSlice
-import { clearCanvas } from '../store/canvasSlice';
+interface RunStatusResponse {
+    id: string;
+    status: TaskStatus;
+    tasks: TaskResponse[];
+}
 
 const useWorkflow = () => {
     const dispatch = useDispatch();
-    const nodes = useSelector((state: RootState) => state.flow.nodes);
-    const workflowID = useSelector((state: RootState) => state.flow.workflowID);
-    const inputNodeValues = useSelector((state: RootState) => state.flow.inputNodeValues);
-    const projectName = useSelector((state: RootState) => state.flow.projectName);
+    const nodes = useSelector((state: RootState) => state.canvas.nodes);
+    const workflowId = useSelector((state: RootState) => state.canvas.workflowId);
+    const nodeDataById = useSelector((state: RootState) => state.nodeData.nodeDataById);
+    const projectName = useSelector((state: RootState) => state.canvas.projectName);
     const [isRunning, setIsRunning] = useState(false);
 
     const updateWorkflowStatus = async (runID: string): Promise<void> => {
         const checkStatusInterval = setInterval(async () => {
             try {
                 const statusResponse: RunStatusResponse = await getRunStatus(runID);
-                const outputs = statusResponse.outputs;
                 console.log('Status Response:', statusResponse);
 
-                if (outputs) {
-                    Object.entries(outputs).forEach(([nodeId, data]) => {
-                        const node = nodes.find((node: Node) => node.id === nodeId);
-                        if (data && node) {
-                            dispatch(updateNodeData({
-                                id: nodeId,
-                                data: {
-                                    status: data.status,
-                                    run: { ...node.data.run, ...data }
-                                }
-                            }));
+                if (statusResponse.tasks) {
+                    statusResponse.tasks.forEach((task) => {
+                        const nodeId = task.node_id;
+                        const outputs = task.outputs || {};
+                        const nodeTaskStatus = task.status;
+
+                        // Check if the task output or status is different from current node data
+                        const currentNodeData = nodeDataById[nodeId];
+                        const isOutputDifferent = JSON.stringify(outputs) !== JSON.stringify(currentNodeData?.run);
+                        const isStatusDifferent = nodeTaskStatus !== currentNodeData?.taskStatus;
+
+                        if (isOutputDifferent) {
+                            dispatch(setNodeRunData({ nodeId, runData: outputs }));
+                        }
+                        if (isStatusDifferent) {
+                            dispatch(setNodeTaskStatus({ nodeId, status: nodeTaskStatus }));
                         }
                     });
                 }
@@ -46,36 +54,26 @@ const useWorkflow = () => {
                 console.error('Error fetching workflow status:', error);
                 clearInterval(checkStatusInterval);
             }
-        }, 10000);
+        }, 1000);
     };
 
-    const handleRunWorkflow = async (): Promise<void> => {
+    const handleRunWorkflow = async (inputValues: Record<string, any>): Promise<void> => {
+        if (!workflowId) return;
+
         try {
-            console.log('Input Node Values:', inputNodeValues);
-
-            // Set all nodes' status to 'pending'
-            nodes.forEach((node: Node) => {
-                dispatch(updateNodeData({ id: node.id, data: { status: 'pending' } }));
-            });
-
-            const test_inputs = {
-                "initial_inputs": {
-                    "node_1731066766087": { "user_message": "Give me weather in London" }
-                }
-            };
-            const result = await startRun(workflowID, test_inputs, null, 'interactive');
-
+            const result = await startRun(workflowId, inputValues, null, 'interactive');
             setIsRunning(true);
             updateWorkflowStatus(result.id);
-
         } catch (error) {
             console.error('Error starting workflow run:', error);
         }
     };
 
     const handleDownloadWorkflow = async (): Promise<void> => {
+        if (!workflowId) return;
+
         try {
-            const workflow = await getWorkflow(workflowID);
+            const workflow = await getWorkflow(workflowId);
             const blob = new Blob([JSON.stringify(workflow, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
