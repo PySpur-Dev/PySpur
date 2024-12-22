@@ -2,6 +2,11 @@
 
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
+export interface TestInput {
+  id: string;
+  [key: string]: any;
+}
+
 export interface NodeConfigData {
   // The heavier fields that you need only in the sidebar, etc.
   config: {
@@ -21,10 +26,12 @@ interface NodeDataState {
   nodeDataById: {
     [nodeId: string]: NodeConfigData;
   };
+  testInputs: TestInput[];
 }
 
 const initialState: NodeDataState = {
   nodeDataById: {},
+  testInputs: [],
 };
 
 const nodeDataSlice = createSlice({
@@ -101,6 +108,25 @@ const nodeDataSlice = createSlice({
         }
       });
     },
+
+    setTestInputs: (state, action: PayloadAction<TestInput[]>) => {
+      state.testInputs = action.payload;
+    },
+
+    addTestInput: (state, action: PayloadAction<TestInput>) => {
+      state.testInputs.push(action.payload);
+    },
+
+    updateTestInput: (state, action: PayloadAction<{ id: string; input: Partial<TestInput> }>) => {
+      const index = state.testInputs.findIndex(input => input.id === action.payload.id);
+      if (index !== -1) {
+        state.testInputs[index] = { ...state.testInputs[index], ...action.payload.input };
+      }
+    },
+
+    deleteTestInput: (state, action: PayloadAction<string>) => {
+      state.testInputs = state.testInputs.filter(input => input.id !== action.payload);
+    },
   },
 });
 
@@ -111,7 +137,11 @@ export const {
   setNodeRunData,
   setNodeTaskStatus,
   deleteNodeData,
-  resetAllNodeRuns
+  resetAllNodeRuns,
+  setTestInputs,
+  addTestInput,
+  updateTestInput,
+  deleteTestInput
 } = nodeDataSlice.actions;
 
 export default nodeDataSlice.reducer;

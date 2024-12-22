@@ -4,7 +4,7 @@ import storage from 'redux-persist/lib/storage';
 import canvasReducer from './canvasSlice';
 import { CanvasNode, CanvasEdge } from './canvasSlice';
 import nodeTypesReducer from './nodeTypesSlice';
-import nodeDataReducer, { NodeConfigData } from './nodeDataSlice';
+import nodeDataReducer, { NodeConfigData, TestInput } from './nodeDataSlice';
 import userPreferencesReducer from './userPreferencesSlice';
 import panelReducer from './panelSlice';
 
@@ -22,6 +22,7 @@ export interface RootState {
     nodeDataById: {
       [nodeId: string]: NodeConfigData;
     };
+    testInputs: TestInput[];
   };
   nodeTypes: {
     data: Record<string, any>;

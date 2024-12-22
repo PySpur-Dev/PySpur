@@ -18,7 +18,7 @@ import {
 import { Icon } from "@iconify/react";
 import SettingsCard from './modals/SettingsModal';
 import { setProjectName } from '../store/canvasSlice';
-import { setNodeRunData, setNodeTaskStatus, NodeConfigData } from '../store/nodeDataSlice';
+import { setNodeRunData, setNodeTaskStatus, NodeConfigData, TestInput } from '../store/nodeDataSlice';
 import { CanvasNode, CanvasEdge } from '../store/canvasSlice';
 import RunModal from './modals/RunModal';
 import { getRunStatus, startRun, getWorkflow } from '../utils/api';
@@ -46,7 +46,7 @@ const Header: React.FC<HeaderProps> = ({ activePage }) => {
   const projectName = useSelector((state: RootState) => state.canvas.projectName);
   const workflowId = useSelector((state: RootState) => state.canvas.workflowId);
   const nodeDataById = useSelector((state: RootState) => state.nodeData.nodeDataById);
-  const testInputs = useSelector((state: RootState) => state.canvas.testInputs || []);
+  const testInputs = useSelector((state: RootState) => state.nodeData.testInputs || []);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isDebugModalOpen, setIsDebugModalOpen] = useState<boolean>(false);
   const [isDeployModalOpen, setIsDeployModalOpen] = useState<boolean>(false);
@@ -214,8 +214,6 @@ const Header: React.FC<HeaderProps> = ({ activePage }) => {
     const baseUrl = window.location.origin;
     return `${baseUrl}/api/wf/${workflowId}/start_run/?run_type=non_blocking`;
   };
-
-  const workflowInputVariables = useSelector((state: RootState) => state.flow.workflowInputVariables);
 
   useHotkeys(
     ['mod+enter', 'ctrl+enter'],
