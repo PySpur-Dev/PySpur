@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createNode } from './nodeFactory';
 import { ReactFlowInstance } from '@xyflow/react';
 import { AppDispatch } from '../store/store';
-import { addNode, connect, deleteEdge } from '../store/canvasSlice';
+import { addCanvasNode, connectEdge, deleteCanvasEdge, CanvasNode } from '../store/canvasSlice';
 
 // Define types for the function parameters and return values
 interface NodeDefinition {
@@ -26,43 +26,27 @@ interface Definition {
 }
 
 interface NodeTypes {
-  [key: string]: any; // Adjust this type based on the actual structure of nodeTypes
-}
-
-interface MappedNode {
-  id: string;
-  type: string;
-  position: { x: number; y: number };
-  data: Record<string, any>;
-}
-
-interface MappedEdge {
-  id: string;
-  key: string;
-  selected: boolean;
-  source: string;
-  target: string;
-  sourceHandle: string | null;
-  targetHandle: string | null;
+  [key: string]: any;
 }
 
 export const mapNodesAndEdges = (
   definition: Definition,
   nodeTypes: NodeTypes
-): { nodes: MappedNode[]; edges: MappedEdge[] } => {
+): { nodes: CanvasNode[]; edges: MappedEdge[] } => {
   const { nodes, links } = definition;
-  console.log('nodes', nodes);
 
   // Map nodes to the expected format
-  const mappedNodes: MappedNode[] = nodes.map((node) =>
-    createNode(
-      nodeTypes,
-      node.node_type,
-      node.id,
-      { x: node.coordinates.x, y: node.coordinates.y },
-      node.additionalData || {}
-    )
-  );
+  const mappedNodes: CanvasNode[] = nodes
+    .map((node) => {
+      const result = createNode(
+        nodeTypes,
+        node.node_type,
+        node.id,
+        { x: node.coordinates.x, y: node.coordinates.y }
+      );
+      return result.canvasNode;
+    })
+    .filter((node): node is CanvasNode => node !== null);
 
   // Map links to the expected edge format
   const mappedEdges: MappedEdge[] = links.map((link) => ({
@@ -93,7 +77,7 @@ interface Data {
   };
 }
 
-interface Edge {
+interface MappedEdge {
   id: string;
   key: string;
   selected: boolean;
@@ -106,8 +90,8 @@ interface Edge {
 export const handleSchemaChanges = (
   node: Node,
   data: Data,
-  edges: Edge[]
-): Edge[] => {
+  edges: MappedEdge[]
+): MappedEdge[] => {
   const oldConfig = node.config || {};
   const newConfig = data.config || {};
 
@@ -150,26 +134,8 @@ export const handleSchemaChanges = (
   return edges;
 };
 
-interface Position {
-  x: number;
-  y: number;
-}
-
-interface NodeData {
-  config?: {
-    input_schema?: Record<string, string>;
-    output_schema?: Record<string, string>;
-  };
-}
-
-interface FlowNode {
-  id: string;
-  position: Position;
-  data?: NodeData;
-}
-
 const generateNewNodeId = (
-  nodes: FlowNode[],
+  nodes: CanvasNode[],
   nodeType: string
 ): string => {
   const existingIds = nodes.map((node) => node.id);
@@ -185,9 +151,8 @@ const generateNewNodeId = (
   return newId;
 };
 
-
 export const createNodeAtCenter = (
-  nodes: FlowNode[],
+  nodes: CanvasNode[],
   nodeTypes: Record<string, any>,
   nodeType: string,
   reactFlowInstance: ReactFlowInstance,
@@ -204,16 +169,18 @@ export const createNodeAtCenter = (
     y: center.y,
   };
 
-  const newNode = createNode(nodeTypes, nodeType, id, position);
-  dispatch(addNode({ node: newNode }));
+  const result = createNode(nodeTypes, nodeType, id, position);
+  if (result.canvasNode) {
+    dispatch(addCanvasNode(result.canvasNode));
+  }
 };
 
 export const insertNodeBetweenNodes = (
-  nodes: FlowNode[],
+  nodes: CanvasNode[],
   nodeTypes: Record<string, any>,
   nodeType: string,
-  sourceNode: FlowNode,
-  targetNode: FlowNode,
+  sourceNode: CanvasNode,
+  targetNode: CanvasNode,
   edgeId: string,
   reactFlowInstance: ReactFlowInstance,
   dispatch: AppDispatch,
@@ -231,33 +198,35 @@ export const insertNodeBetweenNodes = (
   };
 
   // Create the new node
-  const newNode = createNode(nodeTypes, nodeType, id, newPosition);
+  const result = createNode(nodeTypes, nodeType, id, newPosition);
+  if (!result.canvasNode) {
+    console.error('Failed to create new node');
+    return;
+  }
 
   // First delete the existing edge
-  dispatch(deleteEdge({ edgeId }));
+  dispatch(deleteCanvasEdge(edgeId));
 
   // Then add the new node
-  dispatch(addNode({ node: newNode }));
+  dispatch(addCanvasNode(result.canvasNode));
 
   // Create source -> new node connection
-  dispatch(connect({
-    connection: {
-      source: sourceNode.id,
-      target: id,
-      sourceHandle: sourceNode.id,
-      targetHandle: sourceNode.id,
-    }
+  dispatch(connectEdge({
+    source: sourceNode.id,
+    target: id,
+    sourceHandle: sourceNode.data.title,
+    targetHandle: result.canvasNode.data.title,
   }));
 
   // Create new node -> target connection
-  dispatch(connect({
-    connection: {
-      source: id,
-      target: targetNode.id,
-      sourceHandle: id,
-      targetHandle: id,
-    }
+  dispatch(connectEdge({
+    source: id,
+    target: targetNode.id,
+    sourceHandle: result.canvasNode.data.title,
+    targetHandle: targetNode.data.title,
   }));
 
-  onComplete?.();
+  if (onComplete) {
+    onComplete();
+  }
 };

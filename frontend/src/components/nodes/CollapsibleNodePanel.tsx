@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Icon } from '@iconify/react';
-import { Button, Accordion, AccordionItem, Input } from '@nextui-org/react';
+import { Button, Accordion, AccordionItem, Input, Selection } from '@nextui-org/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { ReactFlowInstance, useReactFlow } from '@xyflow/react';
 import { useHotkeys } from 'react-hotkeys-hook';
 
 import { AppDispatch, RootState } from '../../store/store';
 import type { NodeType } from '../../store/nodeTypesSlice';
-import { addNodeWithoutConnection } from '../canvas/AddNodePopoverCanvas';
 import { setNodePanelExpanded } from '../../store/panelSlice';
 import { createNodeAtCenter } from '../../utils/flowUtils';
 
@@ -18,11 +17,11 @@ interface NodeTypesByCategory {
 const CollapsibleNodePanel: React.FC = () => {
   const isExpanded = useSelector((state: RootState) => state.panel.isNodePanelExpanded);
   const dispatch = useDispatch();
-  const nodes = useSelector((state: RootState) => state.flow.nodes);
+  const nodes = useSelector((state: RootState) => state.canvas.nodes);
   const nodeTypes = useSelector((state: RootState) => state.nodeTypes.data as NodeTypesByCategory);
   const reactFlowInstance = useReactFlow();
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<Set<string>>(new Set());
+  const [selectedCategory, setSelectedCategory] = useState<Selection>(new Set([]));
   const [filteredNodeTypes, setFilteredNodeTypes] = useState<NodeTypesByCategory>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -46,7 +45,7 @@ const CollapsibleNodePanel: React.FC = () => {
 
   const handleAddNode = (nodeName: string): void => {
     if (reactFlowInstance) {
-      createNodeAtCenter( nodes, nodeTypes, nodeName, reactFlowInstance, dispatch);
+      createNodeAtCenter(nodes, nodeTypes, nodeName, reactFlowInstance, dispatch);
       dispatch(setNodePanelExpanded(false));
     }
   };
@@ -62,11 +61,14 @@ const CollapsibleNodePanel: React.FC = () => {
       if (filteredNodes.length > 0) {
         acc[category] = filteredNodes;
         setSelectedCategory((prev) => {
-          const newSet = new Set(prev);
-          if (!newSet.has(category)) {
-            newSet.add(category);
+          if (prev instanceof Set) {
+            const newSet = new Set(prev);
+            if (!newSet.has(category)) {
+              newSet.add(category);
+            }
+            return newSet;
           }
-          return newSet;
+          return new Set([category]);
         });
       }
       return acc;
@@ -101,7 +103,7 @@ const CollapsibleNodePanel: React.FC = () => {
             startContent={<Icon icon="akar-icons:search" className="text-default-500" />}
           />
           <div className="mt-4 max-h-[calc(100vh-16rem)] overflow-auto" id="node-type-accordion">
-            <Accordion selectionMode="multiple" selectedKeys={Array.from(selectedCategory)} onSelectionChange={setSelectedCategory}>
+            <Accordion selectionMode="multiple" selectedKeys={selectedCategory} onSelectionChange={setSelectedCategory}>
               {Object.keys(filteredNodeTypes).filter(category => category !== "Input/Output").map((category) => (
                 <AccordionItem key={category} title={category}>
                   {filteredNodeTypes[category].map((node: NodeType) => (

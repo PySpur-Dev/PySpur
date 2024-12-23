@@ -1,18 +1,19 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useKeyPress, getConnectedEdges } from '@xyflow/react';
-import { setNodes, setEdges } from '../store/canvasSlice';
-import type { RootState } from '../store/store'; // Assuming you have a RootState type for Redux
-import type { Node, Edge } from '@xyflow/react'; // Assuming these types are provided by the library
+import { canvasNodesChange, canvasEdgesChange } from '../store/canvasSlice';
+import type { RootState } from '../store/store';
+import type { Node, Edge, NodeChange, EdgeChange } from '@xyflow/react';
+import { CanvasNode, CanvasEdge } from '../store/canvasSlice';
 
 // Define types for buffered nodes and edges
-type BufferedNode = Node & { selected?: boolean };
-type BufferedEdge = Edge & { selected?: boolean };
+type BufferedNode = CanvasNode & { selected?: boolean };
+type BufferedEdge = CanvasEdge & { selected?: boolean };
 
 export function useCopyPaste() {
   // Use proper types for Redux selectors
-  const nodes = useSelector((state: RootState) => state.flow.nodes) as BufferedNode[];
-  const edges = useSelector((state: RootState) => state.flow.edges) as BufferedEdge[];
+  const nodes = useSelector((state: RootState) => state.canvas.nodes) as BufferedNode[];
+  const edges = useSelector((state: RootState) => state.canvas.edges) as BufferedEdge[];
   const pasteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dispatch = useDispatch();
 
@@ -45,11 +46,19 @@ export function useCopyPaste() {
     setBufferedNodes(selectedNodes);
     setBufferedEdges(selectedEdges);
 
-    const updatedNodes = nodes.filter((node) => !node.selected);
-    const updatedEdges = edges.filter((edge) => !selectedEdges.includes(edge));
+    // Create node and edge changes for removal
+    const nodeChanges: NodeChange[] = selectedNodes.map(node => ({
+      type: 'remove',
+      id: node.id,
+    }));
 
-    dispatch(setNodes({ nodes: updatedNodes }));
-    dispatch(setEdges({ edges: updatedEdges }));
+    const edgeChanges: EdgeChange[] = selectedEdges.map(edge => ({
+      type: 'remove',
+      id: edge.id,
+    }));
+
+    dispatch(canvasNodesChange(nodeChanges));
+    dispatch(canvasEdgesChange(edgeChanges));
   }, [nodes, edges, dispatch]);
 
   const paste = useCallback(() => {
@@ -85,18 +94,33 @@ export function useCopyPaste() {
       return { ...edge, id, source, target };
     });
 
-    const updatedNodes = [
-      ...nodes.map((node) => ({ ...node, selected: false })),
-      ...newNodes,
+    // Create node and edge changes for adding new elements
+    const nodeChanges: NodeChange[] = [
+      ...nodes.filter(n => n.selected).map(n => ({
+        type: 'select' as const,
+        id: n.id,
+        selected: false
+      })),
+      ...newNodes.map(node => ({
+        type: 'add' as const,
+        item: node
+      }))
     ];
 
-    const updatedEdges = [
-      ...edges.map((edge) => ({ ...edge, selected: false })),
-      ...newEdges,
+    const edgeChanges: EdgeChange[] = [
+      ...edges.filter(e => e.selected).map(e => ({
+        type: 'select' as const,
+        id: e.id,
+        selected: false
+      })),
+      ...newEdges.map(edge => ({
+        type: 'add' as const,
+        item: edge
+      }))
     ];
 
-    dispatch(setNodes({ nodes: updatedNodes }));
-    dispatch(setEdges({ edges: updatedEdges }));
+    dispatch(canvasNodesChange(nodeChanges));
+    dispatch(canvasEdgesChange(edgeChanges));
   }, [bufferedNodes, bufferedEdges, nodes, edges, dispatch]);
 
   // Handle keyboard shortcuts

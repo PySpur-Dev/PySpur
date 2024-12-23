@@ -4,13 +4,13 @@ import { Button } from '@nextui-org/react'
 import { Icon } from "@iconify/react"
 import { useDispatch, useSelector } from 'react-redux'
 import { useHotkeys } from 'react-hotkeys-hook'
-import { undo, redo } from '../../../store/canvasSlice'
+import { undo, redo, CanvasHistory } from '../../../store/canvasSlice'
 import { RootState } from '../../../store/store'
 import TipPopup from './TipPopUp'
 
 const UndoRedo: FC = () => {
   const dispatch = useDispatch()
-  const history = useSelector((state: RootState) => state.flow.history)
+  const history = useSelector((state: RootState) => state.canvas.history) as CanvasHistory
 
   const handleUndo = () => {
     if (history.past.length > 0) {

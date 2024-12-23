@@ -33,7 +33,7 @@ import {
 } from '../../store/canvasSlice';
 import { NodeConfigData } from '../../store/nodeDataSlice';
 import NodeSidebar from '../nodes/nodeSidebar/NodeSidebar';
-import { Dropdown, DropdownMenu, DropdownSection, DropdownItem } from '@nextui-org/react';
+import { Dropdown, DropdownMenu, DropdownSection, DropdownItem, Button } from '@nextui-org/react';
 import DynamicNode from '../nodes/DynamicNode';
 import { v4 as uuidv4 } from 'uuid';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
@@ -54,6 +54,7 @@ import { insertNodeBetweenNodes } from '../../utils/flowUtils';
 import { getLayoutedNodes } from '@/utils/nodeLayoutUtils';
 import { WorkflowCreateRequest } from '@/types/api_types/workflowSchemas';
 import type { Node as FlowNode, Edge as FlowEdge, NodeProps } from '@xyflow/react';
+import { Icon } from '@iconify/react';
 
 // Type definitions
 interface NodeTypesConfig {
@@ -109,7 +110,14 @@ type ExtendedCanvasNode = {
   id: string;
   type: string;
   position: { x: number; y: number };
-  data: FlowNodeData;
+  data: {
+    title: string;
+    acronym: string;
+    color: string;
+    config?: any;
+    run?: any;
+    label?: string;
+  };
   selected?: boolean;
   draggable?: boolean;
   selectable?: boolean;
@@ -152,107 +160,7 @@ const edgeTypes: EdgeTypes = {
   custom: CustomEdge as any, // Type assertion needed due to React Flow types
 };
 
-const ReactFlowWrapper: React.FC<{
-  nodes: ExtendedCanvasNode[];
-  edges: ExtendedCanvasEdge[];
-  onNodesChange: OnNodesChange;
-  onEdgesChange: OnEdgesChange;
-  onConnect: OnConnect;
-  nodeTypes: NodeTypes;
-  edgeTypes: EdgeTypes;
-  onInit: (instance: ReactFlowInstance) => void;
-  onNodeClick: (event: React.MouseEvent, node: Node) => void;
-  onPaneClick: () => void;
-  onNodesDelete: (nodes: Node[]) => void;
-  mode: string;
-  onNodeMouseEnter: (event: React.MouseEvent, node: Node) => void;
-  onNodeMouseLeave: () => void;
-  onEdgeMouseEnter: (event: React.MouseEvent, edge: Edge) => void;
-  onEdgeMouseLeave: () => void;
-  showHelperLines: boolean;
-  helperLines: HelperLines;
-  handleLayout: () => void;
-}> = ({
-  nodes,
-  edges,
-  onNodesChange,
-  onEdgesChange,
-  onConnect,
-  nodeTypes,
-  edgeTypes,
-  onInit,
-  onNodeClick,
-  onPaneClick,
-  onNodesDelete,
-  mode,
-  onNodeMouseEnter,
-  onNodeMouseLeave,
-  onEdgeMouseEnter,
-  onEdgeMouseLeave,
-  showHelperLines,
-  helperLines,
-  handleLayout,
-}) => {
-    const flowNodes = nodes.map(node => ({
-      ...node,
-      data: {
-        ...node.data,
-        label: node.data.title || node.id,
-      },
-    })) as unknown as FlowNode[];
-
-    const flowElements = React.Children.toArray([
-      <Background />,
-      showHelperLines && (
-        <HelperLinesRenderer
-          horizontal={helperLines.horizontal}
-          vertical={helperLines.vertical}
-        />
-      ),
-      <Operator handleLayout={handleLayout} />,
-    ]).filter(Boolean) as React.ReactNode[];
-
-    return (
-      <ReactFlow
-        nodes={flowNodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-        onInit={onInit}
-        onNodeClick={onNodeClick}
-        onPaneClick={onPaneClick}
-        onNodesDelete={onNodesDelete}
-        proOptions={{ hideAttribution: true }}
-        panOnDrag={mode === 'hand' && !nodes.some(n => n.selected)}
-        panOnScroll={true}
-        zoomOnScroll={true}
-        minZoom={0.1}
-        maxZoom={2}
-        selectionMode={mode === 'pointer' ? SelectionMode.Full : SelectionMode.Partial}
-        selectNodesOnDrag={mode === 'pointer'}
-        selectionOnDrag={mode === 'pointer'}
-        selectionKeyCode={mode === 'pointer' ? null : 'Shift'}
-        multiSelectionKeyCode={mode === 'pointer' ? null : 'Shift'}
-        deleteKeyCode="Delete"
-        nodesConnectable={true}
-        connectionMode={ConnectionMode.Loose}
-        onNodeMouseEnter={onNodeMouseEnter}
-        onNodeMouseLeave={onNodeMouseLeave}
-        onEdgeMouseEnter={onEdgeMouseEnter}
-        onEdgeMouseLeave={onEdgeMouseLeave}
-        snapToGrid={true}
-        snapGrid={[25, 25]}
-      >
-        {flowElements}
-      </ReactFlow>
-    );
-  };
-
-// Update the main component to use ReactFlowWrapper
+// Remove the ReactFlowWrapper component and update FlowCanvasContent
 const FlowCanvasContent: React.FC<FlowCanvasProps> = (props) => {
   const { workflowData, workflowID } = props;
   const dispatch = useDispatch();
@@ -544,6 +452,14 @@ const FlowCanvasContent: React.FC<FlowCanvasProps> = (props) => {
             onOpenChange={setPopoverContentVisible}
             placement="bottom"
           >
+            <Button
+              isIconOnly
+              size="sm"
+              variant="light"
+              radius="full"
+            >
+              <Icon icon="solar:add-circle-bold-duotone" className="text-primary" width={20} />
+            </Button>
             <DropdownMenu aria-label="Node types">
               {nodeTypesConfig && Object.keys(nodeTypesConfig)
                 .filter(category => category !== "Input/Output")
@@ -580,27 +496,49 @@ const FlowCanvasContent: React.FC<FlowCanvasProps> = (props) => {
             zIndex: 1,
           }}
         >
-          <ReactFlowWrapper
-            nodes={nodes}
-            edges={edges}
+          <ReactFlow
+            nodes={nodesWithMode}
+            edges={styledEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
+            fitView
             onInit={onInit}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             onNodesDelete={onNodesDelete}
-            mode={mode}
+            proOptions={{ hideAttribution: true }}
+            panOnDrag={mode === 'hand' && !nodes.filter(Boolean).some(n => n.selected)}
+            panOnScroll={true}
+            zoomOnScroll={true}
+            minZoom={0.1}
+            maxZoom={2}
+            selectionMode={mode === 'pointer' ? SelectionMode.Full : SelectionMode.Partial}
+            selectNodesOnDrag={mode === 'pointer'}
+            selectionOnDrag={mode === 'pointer'}
+            selectionKeyCode={mode === 'pointer' ? null : 'Shift'}
+            multiSelectionKeyCode={mode === 'pointer' ? null : 'Shift'}
+            deleteKeyCode="Delete"
+            nodesConnectable={true}
+            connectionMode={ConnectionMode.Loose}
             onNodeMouseEnter={onNodeMouseEnter}
             onNodeMouseLeave={onNodeMouseLeave}
             onEdgeMouseEnter={onEdgeMouseEnter}
             onEdgeMouseLeave={onEdgeMouseLeave}
-            showHelperLines={showHelperLines}
-            helperLines={helperLines}
-            handleLayout={handleLayout}
-          />
+            snapToGrid={true}
+            snapGrid={[25, 25]}
+          >
+            <Background />
+            {showHelperLines && (
+              <HelperLinesRenderer
+                horizontal={helperLines.horizontal}
+                vertical={helperLines.vertical}
+              />
+            )}
+            <Operator handleLayout={handleLayout} />
+          </ReactFlow>
         </div>
         {selectedNodeId && (
           <div

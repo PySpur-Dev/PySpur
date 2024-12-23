@@ -35,7 +35,7 @@ interface IfElseNodeConfig {
 }
 
 // Define interfaces for the metadata structure
-interface NodeMetadata {
+export interface NodeMetadata {
   name: string;
   config?: {
     branches?: BranchCondition[];
@@ -51,6 +51,7 @@ interface NodeMetadata {
 interface NodeTypesState {
   data: Record<string, any>;
   metadata: Record<string, NodeMetadata[]>;
+  constraints: Record<string, any>;
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 }
@@ -58,38 +59,28 @@ interface NodeTypesState {
 interface NodeTypesResponse {
   schema: Record<string, any>;
   metadata: Record<string, NodeMetadata[]>;
+  constraints: Record<string, any>;
 }
-
-export interface NodeType {
-  name: string;
-  config: {
-    branches?: BranchCondition[];
-    input_schema?: Record<string, string>;
-    output_schema?: Record<string, string>;
-    title?: string;
-    [key: string]: any;
-  };
-  type: string;
-  visual_tag: {
-    color: string;
-    acronym: string;
-  };
-}
-
-const initialState: NodeTypesState = {
-  data: {},
-  metadata: {},
-  status: 'idle',
-  error: null,
-};
 
 export const fetchNodeTypes = createAsyncThunk<NodeTypesResponse>(
   'nodeTypes/fetchNodeTypes',
   async () => {
     const response = await getNodeTypes();
-    return response;
+    return {
+      schema: response.schema,
+      metadata: response.metadata,
+      constraints: response.constraints
+    };
   }
 );
+
+const initialState: NodeTypesState = {
+  data: {},
+  metadata: {},
+  constraints: {},
+  status: 'idle',
+  error: null,
+};
 
 const nodeTypesSlice = createSlice({
   name: 'nodeTypes',
@@ -104,6 +95,7 @@ const nodeTypesSlice = createSlice({
         state.status = 'succeeded';
         state.data = action.payload.schema;
         state.metadata = action.payload.metadata;
+        state.constraints = action.payload.constraints;
       })
       .addCase(fetchNodeTypes.rejected, (state, action) => {
         state.status = 'failed';
@@ -155,6 +147,11 @@ export const selectPropertyMetadata = (state: RootState, propertyPath: string): 
   const [nodeType, ...pathParts] = propertyPath.split('.');
   const remainingPath = pathParts.join('.');
   return findMetadataInCategory(state.nodeTypes.metadata, nodeType, remainingPath);
+};
+
+export const selectPropertyConstraints = (state: RootState, propertyPath: string): any | null => {
+  if (!propertyPath) return null;
+  return state.nodeTypes.constraints[propertyPath] || null;
 };
 
 export default nodeTypesSlice.reducer;

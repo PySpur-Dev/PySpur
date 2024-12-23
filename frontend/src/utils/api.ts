@@ -39,23 +39,27 @@ export interface ApiKey {
 export const getNodeTypes = async (): Promise<{
   schema: Record<string, NodeTypeSchema>;
   metadata: Record<string, any>;
+  constraints: Record<string, any>;
 }> => {
   try {
     const response = await axios.get(`${API_BASE_URL}/node/supported_types/`);
     console.log('Raw Node Types Response:', response.data);
     const model = new JSPydanticModel(response.data);
 
-    // Get both the processed schema and metadata
+    // Get the processed schema, metadata, and constraints
     const schema = model.createObjectFromSchema();
     const metadata = model.getAllMetadata();
+    const constraints = model.getConstraints();
 
     console.log('Processed Schema:', schema);
     console.log('Schema Metadata:', metadata);
+    console.log('Schema Constraints:', constraints);
 
-    // Return both schema and metadata
+    // Return all three
     return {
       schema,
       metadata,
+      constraints,
     };
   } catch (error) {
     console.error('Error getting node types:', error);

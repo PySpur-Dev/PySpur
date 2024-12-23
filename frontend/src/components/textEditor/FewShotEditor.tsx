@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import TextEditor from './TextEditor';
-import { updateNodeData } from '../../store/canvasSlice';
+import { updateNodeData } from '../../store/nodeDataSlice';
 import { Button, Tabs, Tab } from "@nextui-org/react";
 import _ from 'lodash';
 import { RootState } from '../../store/store';
@@ -54,14 +54,12 @@ interface FewShotEditorProps {
 
 const FewShotEditor: React.FC<FewShotEditorProps> = ({ nodeID, exampleIndex, onSave, onDiscard }) => {
   const dispatch = useDispatch();
-  const node = useSelector((state: RootState) =>
-    state.flow.nodes.find((n: Node) => n.id === nodeID)
-  );
+  const nodeData = useSelector((state: RootState) => state.nodeData.nodeDataById[nodeID]);
   const [activeTab, setActiveTab] = useState<'input' | 'output'>('input');
 
   const handleContentChange = (content: string) => {
     // Use lodash's cloneDeep to deep clone the few_shot_examples array
-    const updatedExamples = _.cloneDeep(node?.data?.config?.few_shot_examples || []);
+    const updatedExamples = _.cloneDeep(nodeData?.config?.few_shot_examples || []);
 
     if (!updatedExamples[exampleIndex]) {
       updatedExamples[exampleIndex] = {};
@@ -72,13 +70,9 @@ const FewShotEditor: React.FC<FewShotEditorProps> = ({ nodeID, exampleIndex, onS
 
     // Dispatch the updated data to Redux
     dispatch(updateNodeData({
-      id: nodeID,
-      data: {
-        ...node?.data,
-        config: {
-          ...node?.data?.config,
-          few_shot_examples: updatedExamples
-        }
+      nodeId: nodeID,
+      newConfigFields: {
+        few_shot_examples: updatedExamples
       }
     }));
   };
@@ -88,8 +82,9 @@ const FewShotEditor: React.FC<FewShotEditorProps> = ({ nodeID, exampleIndex, onS
       <InputOutputTabs activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <TextEditor
-        key={`${activeTab}-${exampleIndex}`}
-        content={node?.data?.config?.few_shot_examples?.[exampleIndex]?.[activeTab] || ''}
+        nodeID={nodeID}
+        fieldName={`example_${exampleIndex}_${activeTab}`}
+        content={nodeData?.config?.few_shot_examples?.[exampleIndex]?.[activeTab] || ''}
         setContent={handleContentChange}
         isEditable={true}
         fieldTitle={`Example ${exampleIndex + 1} ${activeTab}`}

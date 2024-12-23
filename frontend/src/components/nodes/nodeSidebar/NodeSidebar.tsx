@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
 import {
-  updateNodeData,
-  updateTitleInEdges,
   selectNodeById,
   setSidebarWidth,
-  setSelectedNode,
-  FlowWorkflowNode,
+  setSelectedNodeId,
+  CanvasNode,
   updateNodeTitle,
 } from '../../../store/canvasSlice';
+import { updateNodeData } from '../../../store/nodeDataSlice';
+import { selectPropertyMetadata, selectPropertyConstraints } from '../../../store/nodeTypesSlice';
 import NumberInput from '../../NumberInput';
 import CodeEditor from '../../CodeEditor';
 import { jsonOptions } from '../../../constants/jsonOptions';
@@ -32,7 +32,6 @@ import {
 import { Icon } from '@iconify/react';
 import NodeOutput from '../NodeOutputDisplay';
 import SchemaEditor from './SchemaEditor';
-import { selectPropertyMetadata } from '../../../store/nodeTypesSlice';
 import { cloneDeep, set, debounce } from 'lodash';
 import IfElseEditor from './IfElseEditor';
 import MergeEditor from './MergeEditor';
@@ -128,7 +127,7 @@ const findNodeSchema = (nodeType: string, nodeTypes: NodeTypes): NodeSchema | nu
   return null;
 };
 
-const nodeComparator = (prevNode: FlowWorkflowNode, nextNode: FlowWorkflowNode) => {
+const nodeComparator = (prevNode: CanvasNode, nextNode: CanvasNode) => {
   if (!prevNode || !nextNode) return false;
   // Skip position and measured properties when comparing nodes
   const { position: prevPosition, measured: prevMeasured, ...prevRest } = prevNode;
@@ -136,7 +135,7 @@ const nodeComparator = (prevNode: FlowWorkflowNode, nextNode: FlowWorkflowNode) 
   return isEqual(prevRest, nextRest);
 };
 
-const nodesComparator = (prevNodes: FlowWorkflowNode[], nextNodes: FlowWorkflowNode[]) => {
+const nodesComparator = (prevNodes: CanvasNode[], nextNodes: CanvasNode[]) => {
   if (!prevNodes || !nextNodes) return false;
   if (prevNodes.length !== nextNodes.length) return false;
   return prevNodes.every((node, index) => nodeComparator(node, nextNodes[index]));
@@ -160,12 +159,12 @@ const convertToPythonVariableName = (str: string): string => {
 
 const NodeSidebar: React.FC<NodeSidebarProps> = ({ nodeID }) => {
   const dispatch = useDispatch();
-  const nodes = useSelector((state: RootState) => state.flow.nodes, nodesComparator);
-  const edges = useSelector((state: RootState) => state.flow.edges, isEqual);
+  const nodes = useSelector((state: RootState) => state.canvas.nodes, nodesComparator);
+  const edges = useSelector((state: RootState) => state.canvas.edges, isEqual);
   const nodeTypes = useSelector((state: RootState) => state.nodeTypes.data);
   const nodeTypesMetadata = useSelector((state: RootState) => state.nodeTypes.metadata);
   const node = useSelector((state: RootState) => selectNodeById(state, nodeID));
-  const storedWidth = useSelector((state: RootState) => state.flow.sidebarWidth);
+  const storedWidth = useSelector((state: RootState) => state.canvas.sidebarWidth);
 
   const hasRunOutput = !!node?.data?.run;
 
@@ -209,7 +208,10 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ nodeID }) => {
   // Create a debounced version of the dispatch update
   const debouncedDispatch = useCallback(
     debounce((id: string, updatedModel: DynamicModel) => {
-      dispatch(updateNodeData({ id, data: { config: updatedModel } }));
+      dispatch(updateNodeData({
+        nodeId: id,
+        newConfigFields: { config: updatedModel }
+      }));
     }, 300),
     [dispatch]
   );
@@ -265,7 +267,10 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ nodeID }) => {
     if (isSlider) {
       debouncedDispatch(nodeID, updatedModel);
     } else {
-      dispatch(updateNodeData({ id: nodeID, data: { config: updatedModel } }));
+      dispatch(updateNodeData({
+        nodeId: nodeID,
+        newConfigFields: { config: updatedModel }
+      }));
     }
   };
 
@@ -320,7 +325,10 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ nodeID }) => {
             onChange={(e) => {
               const updatedModel = updateNestedModel(dynamicModel, 'llm_info.model', e.target.value);
               setDynamicModel(updatedModel);
-              dispatch(updateNodeData({ id: nodeID, data: { config: updatedModel } }));
+              dispatch(updateNodeData({
+                nodeId: nodeID,
+                newConfigFields: { config: updatedModel }
+              }));
             }}
             fullWidth
           >
@@ -378,7 +386,21 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ nodeID }) => {
 
   // Update the `getFieldMetadata` function
   const getFieldMetadata = (fullPath: string): FieldMetadata | undefined => {
-    return selectPropertyMetadata({ nodeTypes: { data: nodeTypes, metadata: nodeTypesMetadata } } as unknown as RootState, fullPath) as FieldMetadata;
+    const nodeTypesState = {
+      data: nodeTypes,
+      metadata: nodeTypesMetadata,
+      constraints: nodeTypes.constraints || {},
+      status: 'succeeded' as const,
+      error: null
+    };
+
+    const fieldMetadata = selectPropertyMetadata({ nodeTypes: nodeTypesState } as unknown as RootState, fullPath);
+    const fieldConstraints = selectPropertyConstraints({ nodeTypes: nodeTypesState } as unknown as RootState, fullPath);
+
+    return {
+      ...fieldMetadata,
+      ...fieldConstraints
+    } as FieldMetadata;
   };
 
   // Update the `renderField` function to include missing cases
@@ -651,7 +673,10 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ nodeID }) => {
               branch_refs: newBranchRefs,
             };
             setDynamicModel(updatedModel);
-            dispatch(updateNodeData({ id: nodeID, data: { config: updatedModel } }));
+            dispatch(updateNodeData({
+              nodeId: nodeID,
+              newConfigFields: { config: updatedModel }
+            }));
           }}
           nodeId={nodeID}
         />
@@ -757,6 +782,11 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ nodeID }) => {
     };
   }, [isResizing, dispatch, width]);
 
+  // Update setSelectedNodeId call
+  const handleClose = () => {
+    dispatch(setSelectedNodeId(null));
+  };
+
   return (
     <Card
       className="fixed top-16 bottom-4 right-4 w-96 p-4 rounded-xl border border-solid border-default-200 overflow-auto"
@@ -799,7 +829,7 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ nodeID }) => {
               isIconOnly
               radius="full"
               variant="light"
-              onClick={() => dispatch(setSelectedNode({ nodeId: null }))}
+              onClick={handleClose}
             >
               <Icon
                 className="text-default-500"

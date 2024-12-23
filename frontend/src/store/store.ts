@@ -2,11 +2,12 @@ import { combineReducers, configureStore } from '@reduxjs/toolkit';
 import { persistStore, persistReducer } from 'redux-persist';
 import storage from 'redux-persist/lib/storage';
 import canvasReducer from './canvasSlice';
-import { CanvasNode, CanvasEdge } from './canvasSlice';
+import { CanvasNode, CanvasEdge, CanvasHistory } from './canvasSlice';
 import nodeTypesReducer from './nodeTypesSlice';
 import nodeDataReducer, { NodeConfigData, TestInput } from './nodeDataSlice';
 import userPreferencesReducer from './userPreferencesSlice';
 import panelReducer from './panelSlice';
+import { NodeMetadata } from './nodeTypesSlice';
 
 // Define the RootState type
 export interface RootState {
@@ -17,6 +18,7 @@ export interface RootState {
     workflowId: string | null;
     projectName: string;
     sidebarWidth: number;
+    history: CanvasHistory;
   };
   nodeData: {
     nodeDataById: {
@@ -26,6 +28,9 @@ export interface RootState {
   };
   nodeTypes: {
     data: Record<string, any>;
+    metadata: Record<string, NodeMetadata[]>;
+    status: 'idle' | 'loading' | 'succeeded' | 'failed';
+    error: string | null;
   };
   userPreferences: {
     hasSeenWelcome: boolean;

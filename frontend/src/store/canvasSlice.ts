@@ -20,6 +20,8 @@ export interface CanvasNode {
     title: string;
     acronym: string;
     color: string;
+    config?: any;
+    run?: any;
   };
   measured?: {
     width: number;
@@ -31,22 +33,24 @@ export interface CanvasEdge {
   id: string;
   source: string;
   target: string;
-  sourceHandle?: string;
-  targetHandle?: string;
+  sourceHandle: string;
+  targetHandle: string;
   selected?: boolean;
 }
 
-interface CanvasState {
+export interface CanvasHistory {
+  past: Array<{ nodes: CanvasNode[], edges: CanvasEdge[] }>;
+  future: Array<{ nodes: CanvasNode[], edges: CanvasEdge[] }>;
+}
+
+export interface CanvasState {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   selectedNodeId: string | null;
   workflowId: string | null;
   projectName: string;
   sidebarWidth: number;
-  history: {
-    past: Array<{ nodes: CanvasNode[], edges: CanvasEdge[] }>;
-    future: Array<{ nodes: CanvasNode[], edges: CanvasEdge[] }>;
-  };
+  history: CanvasHistory;
 }
 
 const initialState: CanvasState = {
@@ -86,24 +90,32 @@ const canvasSlice = createSlice({
 
       const { nodes, links } = definition;
       state.nodes = nodes.map(node => {
-        const createdNode = createNode(action.payload.nodeTypes, node.node_type, node.id, { x: node.coordinates.x, y: node.coordinates.y });
-        return createdNode ? {
-          ...createdNode,
-          data: {
-            title: node.id,
-            acronym: createdNode.data.acronym,
-            color: createdNode.data.color
-          }
-        } : null;
+        const result = createNode(action.payload.nodeTypes, node.node_type, node.id, { x: node.coordinates.x, y: node.coordinates.y });
+        if (result.canvasNode) {
+          // Update the node data with the configuration from the workflow definition
+          result.canvasNode.data = {
+            ...result.canvasNode.data,
+            config: node.config,
+            title: node.title || node.id,
+          };
+        }
+        return result.canvasNode;
       }).filter((node): node is CanvasNode => node !== null);
 
-      state.edges = links.map(link => ({
-        id: uuidv4(),
-        source: link.source_id,
-        target: link.target_id,
-        sourceHandle: state.nodes.find(node => node.id === link.source_id)?.data?.title,
-        targetHandle: state.nodes.find(node => node.id === link.target_id)?.data?.title,
-      }));
+      state.edges = links.map(link => {
+        const sourceNode = state.nodes.find(node => node.id === link.source_id);
+        const targetNode = state.nodes.find(node => node.id === link.target_id);
+        const sourceTitle = sourceNode?.data?.title || link.source_id;
+        const targetTitle = targetNode?.data?.title || link.target_id;
+
+        return {
+          id: uuidv4(),
+          source: link.source_id,
+          target: link.target_id,
+          sourceHandle: sourceTitle,
+          targetHandle: targetTitle,
+        };
+      });
     },
 
     canvasNodesChange: (state, action: PayloadAction<NodeChange[]>) => {
@@ -116,10 +128,14 @@ const canvasSlice = createSlice({
 
     connectEdge: (state, action: PayloadAction<Connection>) => {
       saveToHistory(state);
+      const sourceNode = state.nodes.find(node => node.id === action.payload.source);
+      const sourceTitle = sourceNode?.data?.title || action.payload.source;
+
       const newEdge = {
         ...action.payload,
         id: uuidv4(),
-        targetHandle: action.payload.sourceHandle
+        sourceHandle: sourceTitle,
+        targetHandle: sourceTitle,
       };
       state.edges = addEdge(newEdge, state.edges);
     },

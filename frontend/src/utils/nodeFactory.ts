@@ -30,6 +30,8 @@ export const createNode = (
 ): { canvasNode: CanvasNode | null; configData: NodeConfigData | null } => {
   let nodeType: NodeType | null = null;
 
+  console.log('Creating node:', { type, id, nodeTypes });
+
   for (const category in nodeTypes) {
     const found = nodeTypes[category].find((node) => node.name === type);
     if (found) {
@@ -37,7 +39,9 @@ export const createNode = (
       break;
     }
   }
+
   if (!nodeType) {
+    console.error(`Could not find node type "${type}" in nodeTypes:`, nodeTypes);
     return { canvasNode: null, configData: null };
   }
 
@@ -61,5 +65,6 @@ export const createNode = (
     }
   };
 
+  console.log('Created node:', { canvasNode, configData });
   return { canvasNode, configData };
 };

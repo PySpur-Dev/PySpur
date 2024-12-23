@@ -3,7 +3,8 @@ import { useSelector } from 'react-redux';
 import { updateWorkflow } from '../utils/api';
 import { RootState } from '../store/store';
 import { debounce } from 'lodash';
-import { WorkflowCreateRequest, WorkflowNode } from '@/types/api_types/workflowSchemas';
+import { WorkflowCreateRequest, WorkflowNode, TestInput as WorkflowTestInput } from '@/types/api_types/workflowSchemas';
+import { TestInput as StoreTestInput } from '@/store/nodeDataSlice';
 
 interface Position {
   x: number;
@@ -37,37 +38,44 @@ interface Edge {
 }
 
 export const useSaveWorkflow = () => {
-  const nodes = useSelector((state: RootState) => state.flow.nodes);
-  const edges = useSelector((state: RootState) => state.flow.edges);
-  const workflowID = useSelector((state: RootState) => state.flow.workflowID);
-  const workflowInputVariables = useSelector((state: RootState) => state.flow.workflowInputVariables);
-  const workflowName = useSelector((state: RootState) => state.flow.projectName);
-  const testInputs = useSelector((state: RootState) => state.flow.testInputs);
+  const nodes = useSelector((state: RootState) => state.canvas.nodes);
+  const edges = useSelector((state: RootState) => state.canvas.edges);
+  const workflowID = useSelector((state: RootState) => state.canvas.workflowId);
+  const nodeDataById = useSelector((state: RootState) => state.nodeData.nodeDataById);
+  const workflowName = useSelector((state: RootState) => state.canvas.projectName);
+  const testInputs = useSelector((state: RootState) => state.nodeData.testInputs);
 
   // Create a ref to store the current values
-  const valuesRef = useRef({ nodes, edges, workflowID, workflowInputVariables, workflowName, testInputs });
+  const valuesRef = useRef({ nodes, edges, workflowID, nodeDataById, workflowName, testInputs });
 
   // Update the ref when values change
   useEffect(() => {
-    valuesRef.current = { nodes, edges, workflowID, workflowInputVariables, workflowName, testInputs };
-  }, [nodes, edges, workflowID, workflowInputVariables, workflowName, testInputs]);
+    valuesRef.current = { nodes, edges, workflowID, nodeDataById, workflowName, testInputs };
+  }, [nodes, edges, workflowID, nodeDataById, workflowName, testInputs]);
 
   // Create the debounced save function once
   const debouncedSave = useRef(
     debounce(async () => {
-      const { nodes, edges, workflowID, workflowName, testInputs } = valuesRef.current;
-      
+      const { nodes, edges, workflowID, nodeDataById, workflowName, testInputs } = valuesRef.current;
+
       try {
         const updatedNodes = nodes
           .filter((node): node is NonNullable<typeof node> => node !== null && node !== undefined)
           .map((node) => {
+            const nodeConfig = nodeDataById[node.id]?.config || {};
             return {
               ...node,
-              config: node.data?.config,
-              title: node.data?.title,
-              new_id: node.data.config.title || node.data.title || node.type || 'Untitled',
+              config: nodeConfig,
+              title: nodeConfig.title || node.data.title,
+              new_id: nodeConfig.title || node.data.title || node.type || 'Untitled',
             };
           });
+
+        // Convert test inputs to the correct format
+        const convertedTestInputs: WorkflowTestInput[] = testInputs.map((input: StoreTestInput) => ({
+          ...input,
+          id: parseInt(input.id, 10)
+        }));
 
         const updatedWorkflow: WorkflowCreateRequest = {
           name: workflowName,
@@ -88,7 +96,7 @@ export const useSaveWorkflow = () => {
                 target_id: targetNode?.new_id || '',
               };
             }),
-            test_inputs: testInputs,
+            test_inputs: convertedTestInputs,
           }
         };
 
