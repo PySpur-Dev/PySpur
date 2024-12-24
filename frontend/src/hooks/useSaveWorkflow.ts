@@ -62,13 +62,32 @@ export const useSaveWorkflow = () => {
         const updatedNodes = nodes
           .filter((node): node is NonNullable<typeof node> => node !== null && node !== undefined)
           .map((node) => {
+            // Get the full node data from nodeDataById
             const nodeConfig = nodeDataById[node.id]?.config || {};
-            return {
+            const nodeTitle = nodeConfig.title || node.data.title;
+
+            // Combine canvas node data with nodeData store data
+            const combinedNode = {
               ...node,
-              config: nodeConfig,
-              title: nodeConfig.title || node.data.title,
-              new_id: nodeConfig.title || node.data.title || node.type || 'Untitled',
+              config: {
+                ...nodeConfig,
+                // Preserve any run data and task status
+                run: nodeDataById[node.id]?.run,
+                taskStatus: nodeDataById[node.id]?.taskStatus,
+                // Ensure schemas are included
+                input_schema: nodeConfig.input_schema || {},
+                output_schema: nodeConfig.output_schema || {},
+                // Preserve any LLM specific data
+                llm_info: nodeConfig.llm_info,
+                system_message: nodeConfig.system_message,
+                user_message: nodeConfig.user_message,
+                few_shot_examples: nodeConfig.few_shot_examples,
+              },
+              title: nodeTitle,
+              new_id: nodeTitle || node.type || 'Untitled',
             };
+
+            return combinedNode;
           });
 
         // Convert test inputs to the correct format
@@ -86,6 +105,7 @@ export const useSaveWorkflow = () => {
               node_type: node.type,
               config: node.config,
               coordinates: node.position,
+              title: node.title || node.new_id,
             } as WorkflowNode)),
             links: edges.map((edge: Edge) => {
               const sourceNode = updatedNodes.find(node => node?.id === edge.source);

@@ -7,6 +7,7 @@ import {
   CanvasNode,
   CanvasEdge
 } from '../../store/canvasSlice';
+import { updateNodeData } from '../../store/nodeDataSlice';
 import { Input, Button, Alert } from '@nextui-org/react';
 import { Icon } from '@iconify/react';
 import styles from './InputNode.module.css';
@@ -18,6 +19,9 @@ interface InputNodeProps {
     title: string;
     acronym: string;
     color: string;
+    config?: {
+      output_schema?: Record<string, any>;
+    };
   };
   [key: string]: any;
 }
@@ -27,10 +31,13 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
   const nodeRef = useRef<HTMLDivElement | null>(null);
   const [nodeWidth, setNodeWidth] = useState<string>('auto');
   const [editingField, setEditingField] = useState<string | null>(null);
+  const [newFieldValue, setNewFieldValue] = useState<string>('');
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [showKeyError, setShowKeyError] = useState<boolean>(false);
 
   const incomingEdges = useSelector((state: RootState) => state.canvas.edges.filter((edge) => edge.target === id));
+  const outputSchema = data?.config?.output_schema || {};
+  const outputSchemaKeys = Object.keys(outputSchema);
 
   useEffect(() => {
     if (nodeRef.current) {
@@ -46,7 +53,7 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
         setNodeWidth(`${finalWidth}px`);
       }
     }
-  }, [data, nodeWidth]);
+  }, [data, nodeWidth, incomingEdges]);
 
   const convertToPythonVariableName = (str: string): string => {
     // Replace spaces and hyphens with underscores
@@ -60,14 +67,79 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
     return str;
   };
 
-  const handleTitleChange = useCallback(
-    (newTitle: string) => {
-      const validTitle = convertToPythonVariableName(newTitle);
-      if (validTitle && validTitle !== data.title) {
-        dispatch(updateNodeTitle({ nodeId: id, newTitle: validTitle }));
+  const handleAddWorkflowInputVariable = useCallback(() => {
+    if (!newFieldValue.trim()) return;
+    const newKey = convertToPythonVariableName(newFieldValue.trim());
+
+    if (newKey !== newFieldValue.trim()) {
+      setShowKeyError(true);
+      setTimeout(() => setShowKeyError(false), 3000);
+    }
+
+    const newOutputSchema = {
+      ...outputSchema,
+      [newKey]: 'str'
+    };
+
+    dispatch(updateNodeData({
+      nodeId: id,
+      newConfigFields: {
+        config: {
+          ...data.config,
+          output_schema: newOutputSchema
+        }
       }
+    }));
+    setNewFieldValue('');
+  }, [dispatch, newFieldValue, outputSchema, data.config, id]);
+
+  const handleDeleteWorkflowInputVariable = useCallback(
+    (keyToDelete: string) => {
+      const newOutputSchema = { ...outputSchema };
+      delete newOutputSchema[keyToDelete];
+
+      dispatch(updateNodeData({
+        nodeId: id,
+        newConfigFields: {
+          config: {
+            ...data.config,
+            output_schema: newOutputSchema
+          }
+        }
+      }));
     },
-    [dispatch, id, data.title]
+    [dispatch, outputSchema, data.config, id]
+  );
+
+  const handleWorkflowInputVariableKeyEdit = useCallback(
+    (oldKey: string, newKey: string) => {
+      if (oldKey === newKey || !newKey.trim()) {
+        setEditingField(null);
+        return;
+      }
+
+      const validKey = convertToPythonVariableName(newKey);
+      if (validKey !== newKey) {
+        setShowKeyError(true);
+        setTimeout(() => setShowKeyError(false), 3000);
+      }
+
+      const newOutputSchema = { ...outputSchema };
+      newOutputSchema[validKey] = newOutputSchema[oldKey];
+      delete newOutputSchema[oldKey];
+
+      dispatch(updateNodeData({
+        nodeId: id,
+        newConfigFields: {
+          config: {
+            ...data.config,
+            output_schema: newOutputSchema
+          }
+        }
+      }));
+      setEditingField(null);
+    },
+    [dispatch, outputSchema, data.config, id]
   );
 
   const InputHandleRow: React.FC<{ id: string; keyName: string }> = ({ id, keyName }) => {
@@ -120,6 +192,77 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
             ))}
           </div>
         )}
+        <div className={`${styles.handlesColumn} border-r mr-1`}>
+          {outputSchemaKeys.length > 0 && (
+            <table style={{ width: '100%' }}>
+              <tbody>
+                {outputSchemaKeys.map((key) => (
+                  <tr key={key} className="relative w-full px-4 py-2">
+                    <td className={styles.handleLabelCell}>
+                      {!isCollapsed && (
+                        <div className="flex items-center gap-2">
+                          {editingField === key ? (
+                            <Input
+                              autoFocus
+                              defaultValue={key}
+                              size="sm"
+                              variant="faded"
+                              radius="lg"
+                              onBlur={(e) => {
+                                const target = e.target as HTMLInputElement;
+                                handleWorkflowInputVariableKeyEdit(key, target.value);
+                              }}
+                              onChange={(e) => {
+                                const target = e.target as HTMLInputElement;
+                                const validValue = convertToPythonVariableName(target.value);
+                                if (validValue !== target.value) {
+                                  target.value = validValue;
+                                  setShowKeyError(true);
+                                  setTimeout(() => setShowKeyError(false), 3000);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                const target = e.target as HTMLInputElement;
+                                if (e.key === 'Enter') {
+                                  handleWorkflowInputVariableKeyEdit(key, target.value);
+                                } else if (e.key === 'Escape') {
+                                  setEditingField(null);
+                                }
+                              }}
+                              classNames={{
+                                input: 'bg-default-100',
+                                inputWrapper: 'shadow-none',
+                              }}
+                            />
+                          ) : (
+                            <div className="flex flex-col w-full gap-1">
+                              <div className="flex items-center justify-between">
+                                <span
+                                  className={`${styles.handleLabel} text-sm font-medium cursor-pointer hover:text-primary`}
+                                  onClick={() => setEditingField(key)}
+                                >
+                                  {key}
+                                </span>
+                                <Button
+                                  isIconOnly
+                                  size="sm"
+                                  variant="light"
+                                  onClick={() => handleDeleteWorkflowInputVariable(key)}
+                                >
+                                  <Icon icon="solar:trash-bin-minimalistic-linear" width={16} />
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
         <div className="right-0 w-4 items-center justify-center flex">
           <Handle
             type="source"
@@ -132,6 +275,47 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
       </div>
     );
   };
+
+  const renderAddField = () =>
+    !isCollapsed && (
+      <div className="flex items-center gap-2 px-4 py-2">
+        <Input
+          placeholder="Enter new field name"
+          value={newFieldValue}
+          onChange={(e) => {
+            const validValue = convertToPythonVariableName(e.target.value);
+            if (validValue !== e.target.value) {
+              setShowKeyError(true);
+              setTimeout(() => setShowKeyError(false), 3000);
+            }
+            setNewFieldValue(validValue);
+          }}
+          size="sm"
+          variant="faded"
+          radius="lg"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleAddWorkflowInputVariable();
+            }
+          }}
+          classNames={{
+            input: "bg-background",
+            inputWrapper: "shadow-none bg-background"
+          }}
+          endContent={
+            <Button
+              isIconOnly
+              size="sm"
+              variant="light"
+              onClick={handleAddWorkflowInputVariable}
+              className="text-default-400 hover:text-default-500"
+            >
+              <Icon icon="solar:add-circle-bold" width={16} className="text-default-500" />
+            </Button>
+          }
+        />
+      </div>
+    );
 
   return (
     <div className={styles.inputNodeWrapper}>
@@ -160,6 +344,7 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
       >
         <div className={styles.nodeWrapper} ref={nodeRef}>
           {renderWorkflowInputs()}
+          {renderAddField()}
         </div>
       </BaseNode>
     </div>

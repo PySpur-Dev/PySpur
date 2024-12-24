@@ -8,16 +8,26 @@ export interface TestInput {
 }
 
 export interface NodeConfigData {
-  // The heavier fields that you need only in the sidebar, etc.
   config: {
     title?: string;
+    type?: string;
     output_schema?: Record<string, any>;
-    llm_info?: Record<string, any>;
+    llm_info?: {
+      model?: string;
+      max_tokens?: number;
+      temperature?: number;
+      top_p?: number;
+      [key: string]: any;
+    };
     system_message?: string;
     user_message?: string;
     few_shot_examples?: Record<string, any>[] | null;
+    enforce_schema?: boolean;
     [key: string]: any;
   };
+  input_schema?: Record<string, any>;
+  output_schema?: Record<string, any>;
+  node_type?: string;
   run?: Record<string, any>;
   taskStatus?: string;
 }
@@ -43,13 +53,19 @@ const nodeDataSlice = createSlice({
       action: PayloadAction<{ nodeId: string; data: NodeConfigData }>
     ) => {
       const { nodeId, data } = action.payload;
-      state.nodeDataById[nodeId] = data;
+      state.nodeDataById[nodeId] = {
+        config: data.config || {},
+        input_schema: data.input_schema || {},
+        output_schema: data.output_schema || {},
+        node_type: data.node_type,
+        run: data.run,
+        taskStatus: data.taskStatus
+      };
 
       // Special handling for InputNode
-      if (data.config && data.config.node_type === 'InputNode') {
-        // Ensure output schema exists
-        if (!data.config.output_schema) {
-          data.config.output_schema = {};
+      if (data.node_type === 'InputNode') {
+        if (!state.nodeDataById[nodeId].config.output_schema) {
+          state.nodeDataById[nodeId].config.output_schema = {};
         }
       }
     },
@@ -58,26 +74,45 @@ const nodeDataSlice = createSlice({
       state,
       action: PayloadAction<{
         nodeId: string;
-        newConfigFields: { [key: string]: any };
+        newConfigFields: Partial<NodeConfigData>;
       }>
     ) => {
       const { nodeId, newConfigFields } = action.payload;
 
       if (!state.nodeDataById[nodeId]) {
-        // If there's no entry yet, initialize
-        state.nodeDataById[nodeId] = { config: {} };
+        // Initialize with empty objects for all required fields
+        state.nodeDataById[nodeId] = {
+          config: {},
+          input_schema: {},
+          output_schema: {},
+          node_type: newConfigFields.node_type
+        };
       }
 
+      // Deep merge the configuration
+      state.nodeDataById[nodeId] = {
+        ...state.nodeDataById[nodeId],
+        ...newConfigFields,
+        config: {
+          ...state.nodeDataById[nodeId].config,
+          ...newConfigFields.config
+        },
+        input_schema: {
+          ...state.nodeDataById[nodeId].input_schema,
+          ...newConfigFields.input_schema
+        },
+        output_schema: {
+          ...state.nodeDataById[nodeId].output_schema,
+          ...newConfigFields.output_schema
+        }
+      };
+
       // Special handling for InputNode
-      if (state.nodeDataById[nodeId].config?.node_type === 'InputNode') {
-        // Ensure output schema exists
+      if (state.nodeDataById[nodeId].node_type === 'InputNode') {
         if (!state.nodeDataById[nodeId].config.output_schema) {
           state.nodeDataById[nodeId].config.output_schema = {};
         }
       }
-
-      // Merge the new fields into existing config
-      Object.assign(state.nodeDataById[nodeId].config, newConfigFields);
     },
 
     updateNodeTitle: (

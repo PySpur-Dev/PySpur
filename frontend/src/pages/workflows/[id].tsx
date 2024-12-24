@@ -54,7 +54,10 @@ const WorkflowDetailPage = () => {
           dispatch(updateNodeData({
             nodeId: node.id,
             newConfigFields: {
-              config: node.config
+              config: node.config.config || {},
+              output_schema: node.config.output_schema || {},
+              input_schema: node.config.input_schema || {},
+              node_type: node.node_type
             }
           }));
         });
