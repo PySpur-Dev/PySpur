@@ -5,7 +5,8 @@ import BaseNode from './BaseNode';
 import {
   updateNodeTitle,
   CanvasNode,
-  CanvasEdge
+  CanvasEdge,
+  updateEdgesOnHandleRename
 } from '../../store/canvasSlice';
 import { updateNodeData } from '../../store/nodeDataSlice';
 import { Input, Button, Alert } from '@nextui-org/react';
@@ -128,6 +129,7 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
       newOutputSchema[validKey] = newOutputSchema[oldKey];
       delete newOutputSchema[oldKey];
 
+      // Update node data
       dispatch(updateNodeData({
         nodeId: id,
         newConfigFields: {
@@ -137,6 +139,15 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
           }
         }
       }));
+
+      // Update edges
+      dispatch(updateEdgesOnHandleRename({
+        nodeId: id,
+        oldHandleId: oldKey,
+        newHandleId: validKey,
+        schemaType: 'output_schema'
+      }));
+
       setEditingField(null);
     },
     [dispatch, outputSchema, data.config, id]

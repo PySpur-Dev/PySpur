@@ -228,6 +228,26 @@ const canvasSlice = createSlice({
         return edge;
       });
     },
+
+    updateEdgesOnHandleRename: (state, action: PayloadAction<{
+      nodeId: string;
+      oldHandleId: string;
+      newHandleId: string;
+      schemaType: 'input_schema' | 'output_schema';
+    }>) => {
+      const { nodeId, oldHandleId, newHandleId, schemaType } = action.payload;
+      saveToHistory(state);
+
+      state.edges = state.edges.map((edge) => {
+        if (schemaType === 'input_schema' && edge.target === nodeId && edge.targetHandle === oldHandleId) {
+          return { ...edge, targetHandle: newHandleId };
+        }
+        if (schemaType === 'output_schema' && edge.source === nodeId && edge.sourceHandle === oldHandleId) {
+          return { ...edge, sourceHandle: newHandleId, targetHandle: newHandleId };
+        }
+        return edge;
+      });
+    },
   },
 });
 
@@ -246,6 +266,7 @@ export const {
   undo,
   redo,
   updateNodeTitle,
+  updateEdgesOnHandleRename,
 } = canvasSlice.actions;
 
 export default canvasSlice.reducer;
