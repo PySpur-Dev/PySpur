@@ -238,6 +238,16 @@ const canvasSlice = createSlice({
       const { nodeId, oldHandleId, newHandleId, schemaType } = action.payload;
       saveToHistory(state);
 
+      // Update the node's output schema if it exists
+      const node = state.nodes.find(n => n.id === nodeId);
+      if (node && node.data.config?.output_schema && schemaType === 'output_schema') {
+        const newSchema = { ...node.data.config.output_schema };
+        newSchema[newHandleId] = newSchema[oldHandleId];
+        delete newSchema[oldHandleId];
+        node.data.config.output_schema = newSchema;
+      }
+
+      // Update edges
       state.edges = state.edges.map((edge) => {
         if (schemaType === 'input_schema' && edge.target === nodeId && edge.targetHandle === oldHandleId) {
           return { ...edge, targetHandle: newHandleId };

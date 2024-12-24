@@ -12,13 +12,20 @@ interface Position {
 }
 
 interface NodeData {
-  config: {
+  config?: {
     data?: {
       input_schema?: Record<string, string>;
       output_schema?: Record<string, string>;
     };
     input_schema?: Record<string, string>;
+    output_schema?: Record<string, string>;
     title?: string;
+    llm_info?: any;
+    system_message?: string;
+    user_message?: string;
+    few_shot_examples?: any;
+    type?: string;
+    enforce_schema?: boolean;
   };
   title?: string;
 }
@@ -28,7 +35,17 @@ interface Node {
   type: string;
   position: Position;
   data: NodeData;
-  config?: any;
+  config?: {
+    config?: any;
+    output_schema?: Record<string, string>;
+    input_schema?: Record<string, string>;
+    llm_info?: any;
+    system_message?: string;
+    user_message?: string;
+    few_shot_examples?: any;
+    type?: string;
+    enforce_schema?: boolean;
+  };
 }
 
 interface Edge {
@@ -66,26 +83,40 @@ export const useSaveWorkflow = () => {
             const nodeConfig = nodeDataById[node.id]?.config || {};
             const nodeTitle = nodeConfig.title || node.data.title;
 
+            // Extract nested config if it exists
+            const nestedConfig = (nodeConfig as any).config || {};
+
             // Combine canvas node data with nodeData store data
             const combinedNode = {
               ...node,
               config: {
                 ...nodeConfig,
+                // Ensure title is at the top level of config
+                title: nodeTitle,
                 // Preserve any run data and task status
                 run: nodeDataById[node.id]?.run,
                 taskStatus: nodeDataById[node.id]?.taskStatus,
                 // Ensure schemas are included
                 input_schema: nodeConfig.input_schema || {},
-                output_schema: nodeConfig.output_schema || {},
+                output_schema: nodeConfig.output_schema || nestedConfig.output_schema || {},
                 // Preserve any LLM specific data
-                llm_info: nodeConfig.llm_info,
-                system_message: nodeConfig.system_message,
-                user_message: nodeConfig.user_message,
-                few_shot_examples: nodeConfig.few_shot_examples,
+                llm_info: nodeConfig.llm_info || nestedConfig.llm_info,
+                system_message: nodeConfig.system_message || nestedConfig.system_message,
+                user_message: nodeConfig.user_message || nestedConfig.user_message,
+                few_shot_examples: nodeConfig.few_shot_examples || nestedConfig.few_shot_examples,
+                // Include any other necessary fields
+                type: nodeConfig.type || nestedConfig.type,
+                enforce_schema: nodeConfig.enforce_schema || nestedConfig.enforce_schema,
+                node_type: node.type
               },
               title: nodeTitle,
               new_id: nodeTitle || node.type || 'Untitled',
             };
+
+            // Remove nested config if it exists
+            if ((combinedNode.config as any).config) {
+              delete (combinedNode.config as any).config;
+            }
 
             return combinedNode;
           });

@@ -99,6 +99,7 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
       const newOutputSchema = { ...outputSchema };
       delete newOutputSchema[keyToDelete];
 
+      // Update node data
       dispatch(updateNodeData({
         nodeId: id,
         newConfigFields: {
@@ -107,6 +108,14 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
             output_schema: newOutputSchema
           }
         }
+      }));
+
+      // Update edges and canvas node data
+      dispatch(updateEdgesOnHandleRename({
+        nodeId: id,
+        oldHandleId: keyToDelete,
+        newHandleId: '', // Empty string since we're deleting
+        schemaType: 'output_schema'
       }));
     },
     [dispatch, outputSchema, data.config, id]
