@@ -2,6 +2,8 @@
 import asyncio
 import base64
 import logging
+import json
+import re
 
 from typing import Any, Callable, Dict, List, Optional, cast
 
@@ -19,6 +21,18 @@ from ollama import AsyncClient
 litellm.set_verbose = True
 load_dotenv()
 
+# Enable parameter dropping for unsupported parameters
+litellm.drop_params = True
+
+# Clean up Azure API base URL if needed
+azure_api_base = os.getenv("AZURE_OPENAI_API_BASE", "").rstrip("/")
+if azure_api_base.endswith("/openai"):
+    azure_api_base = azure_api_base.rstrip("/openai")
+os.environ["AZURE_OPENAI_API_BASE"] = azure_api_base
+
+# If Azure OpenAi is configured, set it as the default provider
+if os.getenv("AZURE_OPENAI_API_KEY"):
+    litellm.api_key = os.getenv("AZURE_OPENAI_API_KEY")
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSIONS = 1536
@@ -29,6 +43,7 @@ class LLMProvider(str, Enum):
     ANTHROPIC = "Anthropic"
     GOOGLE = "Google"
     OLLAMA = "Ollama"
+    AZURE_OPENAI = "AzureOpenAI"
 
 
 class LLMModel(BaseModel):
@@ -45,6 +60,11 @@ class LLMModels(str, Enum):
     O1_MINI = "o1-mini"
     GPT_4_TURBO = "gpt-4-turbo"
     CHATGPT_4O_LATEST = "chatgpt-4o-latest"
+
+    # Azure OpenAI Models
+    AZURE_GPT_4="azure/gpt-4"
+    AZURE_GPT_4_TURBO="azure/gpt-4-turbo"
+    AZURE_GPT_35_TURBO="azure/gpt-35-turbo"
 
     # Anthropic Models
     CLAUDE_3_5_SONNET_LATEST = "claude-3-5-sonnet-latest"
@@ -95,6 +115,22 @@ class LLMModels(str, Enum):
                 id=cls.CHATGPT_4O_LATEST.value,
                 provider=LLMProvider.OPENAI,
                 name="ChatGPT-4 Optimized Latest",
+            ),
+            # Azure OpenAI Models
+            cls.AZURE_GPT_4.value: LLMModel(
+                id=cls.AZURE_GPT_4.value,
+                provider=LLMProvider.AZURE_OPENAI,
+                name="Azure GPT-4",
+            ),
+            cls.AZURE_GPT_4_TURBO.value: LLMModel(
+                id=cls.AZURE_GPT_4_TURBO.value,
+                provider=LLMProvider.AZURE_OPENAI,
+                name="Azure GPT-4 Turbo",
+            ),
+            cls.AZURE_GPT_35_TURBO.value: LLMModel(
+                id=cls.AZURE_GPT_35_TURBO.value,
+                provider=LLMProvider.AZURE_OPENAI,
+                name="Azure GPT-3.5 Turbo",
             ),
             # Anthropic Models
             cls.CLAUDE_3_5_SONNET_LATEST.value: LLMModel(
@@ -282,14 +318,71 @@ def async_retry(*dargs, **dkwargs):
 @async_retry(wait=wait_random_exponential(min=30, max=120), stop=stop_after_attempt(3))
 async def completion_with_backoff(**kwargs) -> str:
     try:
-        # Only use api_base if it has a non-empty value
-        if "api_base" in kwargs and kwargs["api_base"]:
-            response = await acompletion(api_base=kwargs.pop("api_base"), **kwargs)
-        else:
+        model = kwargs.get("model", "")
+
+        # Log initial request configuration
+        logging.info("=== LLM Request Configuration ===")
+        logging.info(f"OriginalModel: {model}")
+        logging.info(f"API Base: {kwargs.get('api_base', 'Not provided')}")
+        if model.startswith("azure/") or (os.getenv("AZURE_OPENAI_API_KEY")) and not model.startswith("ollama/"):
+            logging.info(f"Azure API Version: {os.getenv('AZURE_OPENAI_API_VERSION', 'Not provided')}")
+            logging.info(f"Azure API Deployment Name: {os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME', 'Not provided')}")
+            logging.info(f"Azure API Key Set: {'Yes' if os.getenv('AZURE_OPENAI_API_KEY') else 'No'}")
+
+            # Remove the "azure/" prefix if present
+            base_model = model.replace("azure/", "") if model.startswith("azure/") else model
+            logging.info(f"Using Azure OpenAI for model: {base_model}")
+
+            # Create a clean copy of kwargs without resonse_format for Azure
+            azure_kwargs = kwargs.copy()
+            azure_kwargs.pop("response_format", None)
+
+            # Set up Azure-specific configuration
+            azure_kwargs = {
+                "model": base_model,
+                "api_key": os.getenv("AZURE_OPENAI_API_KEY"),
+                "api_base": os.getenv("AZURE_OPENAI_API_BASE"),
+                "api_version": os.getenv("AZURE_OPENAI_API_VERSION"),
+                "deployment_id": os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+            }
+
+            # Verify all required Azure configuration is present
+            required_config = ["api_key", "api_base", "api_version", "deployment_id"]
+            missing_config = [key for key in required_config if not azure_kwargs.get(key)]
+            if missing_config:
+                raise ValueError(f"Missing Azure configuration for: {', '.join(missing_config)}")
+            
+            # Log the configuration (without sensitive information)
+            save_config = azure_kwargs.copy()
+            save_config['api_key'] = '********' if "api_key" in save_config else None
+            logging.info(f"Azure Configuration: {save_config}")
+
+            try: 
+                response = await acompletion(**azure_kwargs)
+                return response.choices[0].message.content
+            except Exception as e:
+                logging.error(f"Error calling Azure OpenAI: {e}")
+                logging.error(f"Full Azure Configuration (sanitized): {save_config}")
+                raise
+        elif model.startswith("ollama/"):
+            logging.info("=== Ollama Configuration ===")
             response = await acompletion(**kwargs)
-        return response.choices[0].message.content
+            return response.choices[0].message.content
+        else:
+            logging.info("=== Standard Configuration ===")
+            response = await acompletion(**kwargs)
+            return response.choices[0].message.content
     except Exception as e:
-        logging.error(e)
+        logging.error(f"=== LLM Request Error ===")
+        # Create a save copy of kwargs without sensitive information
+        save_config = kwargs.copy()
+        save_config['api_key'] = '********' if "api_key" in save_config else None
+        logging.error(f"Error occurred with configuration: {save_config}")
+        logging.error(f"Error type: {type(e).__name__}")
+        logging.error(f"Error message: {str(e)}")
+        if hasattr(e, 'response'):
+            logging.error(f"Response status: {getattr(e.response, 'status_code', 'N/A')}")
+            logging.error(f"Response body: {getattr(e.response, 'text', 'N/A')}")
         raise e
 
 
@@ -321,18 +414,45 @@ async def generate_text(
         "messages": messages,
         "temperature": temperature,
     }
-    if json_mode and not model_name.startswith("ollama"):
-        kwargs["response_format"] = {"type": "json_object"}
+
+    if json_mode:
+        if model_name.startswith("ollama"):
+            options = OllamaOptions(temperature=temperature, max_tokens=max_tokens)
+            response = await ollama_with_backoff(
+                model=model_name,
+                options=options,
+                messages=messages,
+                format="json",
+                api_base=api_base,
+            )
+        else:
+            # For both Azure and OpenAI, we need to set the response_format to json_object
+            kwargs["response_format"] = {"type": "json_object"}
+            # Add system message to enforce JSON mode
+            messages.insert(0, {
+                "role": "system", 
+                "content": "You must respond with valid JSON only. No other text before or after the JSON Object."
+                })
+            response = await completion_with_backoff(**kwargs)
+
+            # Verify JSON Response
+            try:
+                json.loads(response)
+            except json.JSONDecodeError:
+                logging.error(f"Response is not valid JSON: {response}")
+                # Try to fix common json issues
+                if not response.startswith("{"):
+                    # Extract JSON if there is extra text
+                    json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                    if json_match:
+                        response = json_match.group(0)
+                    else:
+                        # Create a valid json response
+                        response = '{' + f'"error": "Invalid response format", "original_response": "{response}"' + '}'
+                raise ValueError("Response is not valid JSON")
+    else:
         response = await completion_with_backoff(**kwargs)
-    elif json_mode and model_name.startswith("ollama"):
-        options = OllamaOptions(temperature=temperature, max_tokens=max_tokens)
-        response = await ollama_with_backoff(
-            model=model_name,
-            options=options,
-            messages=messages,
-            format="json",
-            api_base=api_base,
-        )
+        
     return cast(str, response)
 
 
