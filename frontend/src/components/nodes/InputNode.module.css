@@ -1,71 +1,71 @@
 .nodeWrapper {
-    position: relative;
-    width: 100%;
-    min-height: 20px;
-  }
-  
-  .handlesWrapper {
-    display: flex;
-    width: 100%;
-  }
-  
-  .handlesColumn {
-    width: 100%;
-    position: relative;
-  }
-  
-  .handleLabelCell {
-    width: calc(100% - 40px);
-    padding-left: 0.75rem; /* Equivalent to 'pl-3' in Tailwind */
-  }
-  
-  .handleCell {
-    width: 20px;
-    vertical-align: middle;
-    text-align: center;
-  }
-  
-  .handleWrapper {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100%;
-  }
-  
-  .handleLabel {
-    font-size: 1rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 200px;
-    display: inline-block;
-    position: relative;
-    z-index: 1000;
-  }
-  
-  .handle {
-    width: 0.8rem !important;
-    height: 0.8rem !important;
-    background: #555 !important;
-    position: relative;
-    z-index: 1001 !important;
-    top: auto;
-    right: auto;
-    transform: none;
-  }
-  
-  .handle:hover {
-    background-color: #777;
-  }
-  
-  .collapsedHandleOutput {
-    position: absolute !important;
-    top: 50% !important;
-    right: 4px !important;
-    transform: translateY(-50%) !important;
-  }
-  
-  .inputNodeWrapper {
-    position: relative;
-  }
-  
+  position: relative;
+  width: 100%;
+  min-height: 20px;
+}
+
+.handlesWrapper {
+  display: flex;
+  width: 100%;
+}
+
+.handlesColumn {
+  width: 100%;
+  position: relative;
+}
+
+.handleLabelCell {
+  width: calc(100% - 40px);
+  padding-left: 0.75rem;
+  /* Equivalent to 'pl-3' in Tailwind */
+}
+
+.handleCell {
+  width: 20px;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.handleWrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.handleLabel {
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  display: inline-block;
+  position: relative;
+  z-index: 1000;
+}
+
+.handle {
+  width: 0.8rem !important;
+  height: 0.8rem !important;
+  background: #555 !important;
+  position: relative;
+  z-index: 1001 !important;
+  top: auto;
+  right: auto;
+  transform: none;
+}
+
+.handle:hover {
+  background-color: #777;
+}
+
+.collapsedHandleOutput {
+  position: absolute !important;
+  top: 50% !important;
+  right: 4px !important;
+  transform: translateY(-50%) !important;
+}
+
+.inputNodeWrapper {
+  position: relative;
+}

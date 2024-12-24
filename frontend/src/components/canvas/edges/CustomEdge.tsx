@@ -109,8 +109,7 @@ const CustomEdge = ({
     });
   }, [sourceNode, targetNode, id, onPopoverOpen]);
 
-  const handleDeleteEdge = useCallback((event: React.MouseEvent) => {
-    event.stopPropagation();
+  const handleDeleteEdge = useCallback(() => {
     dispatch(deleteCanvasEdge(id));
   }, [id, dispatch]);
 
@@ -136,7 +135,7 @@ const CustomEdge = ({
                 size="sm"
                 variant="light"
                 radius="full"
-                onClick={handleAddNode}
+                onPress={handleAddNode}
                 className="bg-background hover:bg-default-100"
               >
                 <Icon icon="solar:add-circle-bold-duotone" className="text-primary" width={20} />
@@ -146,7 +145,7 @@ const CustomEdge = ({
                 size="sm"
                 variant="light"
                 radius="full"
-                onClick={handleDeleteEdge}
+                onPress={handleDeleteEdge}
                 className="bg-background hover:bg-default-100"
               >
                 <Icon icon="solar:trash-bin-trash-bold-duotone" className="text-danger" width={20} />

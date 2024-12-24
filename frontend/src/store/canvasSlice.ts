@@ -98,22 +98,31 @@ const canvasSlice = createSlice({
             config: node.config,
             title: node.title || node.id,
           };
+
+          // Special handling for InputNode
+          if (node.node_type === 'InputNode') {
+            // Initialize output schema if it doesn't exist
+            if (!result.canvasNode.data.config) {
+              result.canvasNode.data.config = {};
+            }
+            if (!result.canvasNode.data.config.output_schema) {
+              result.canvasNode.data.config.output_schema = {};
+            }
+          }
         }
         return result.canvasNode;
       }).filter((node): node is CanvasNode => node !== null);
 
       state.edges = links.map(link => {
         const sourceNode = state.nodes.find(node => node.id === link.source_id);
-        const targetNode = state.nodes.find(node => node.id === link.target_id);
-        const sourceTitle = sourceNode?.data?.title || link.source_id;
-        const targetTitle = targetNode?.data?.title || link.target_id;
+        const sourceTitle = sourceNode?.data?.config?.title || sourceNode?.data?.title || link.source_id;
 
         return {
           id: uuidv4(),
           source: link.source_id,
           target: link.target_id,
           sourceHandle: sourceTitle,
-          targetHandle: targetTitle,
+          targetHandle: sourceTitle,
         };
       });
     },

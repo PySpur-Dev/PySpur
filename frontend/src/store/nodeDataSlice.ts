@@ -44,6 +44,14 @@ const nodeDataSlice = createSlice({
     ) => {
       const { nodeId, data } = action.payload;
       state.nodeDataById[nodeId] = data;
+
+      // Special handling for InputNode
+      if (data.config && data.config.node_type === 'InputNode') {
+        // Ensure output schema exists
+        if (!data.config.output_schema) {
+          data.config.output_schema = {};
+        }
+      }
     },
 
     updateNodeData: (
@@ -58,6 +66,14 @@ const nodeDataSlice = createSlice({
       if (!state.nodeDataById[nodeId]) {
         // If there's no entry yet, initialize
         state.nodeDataById[nodeId] = { config: {} };
+      }
+
+      // Special handling for InputNode
+      if (state.nodeDataById[nodeId].config?.node_type === 'InputNode') {
+        // Ensure output schema exists
+        if (!state.nodeDataById[nodeId].config.output_schema) {
+          state.nodeDataById[nodeId].config.output_schema = {};
+        }
       }
 
       // Merge the new fields into existing config
