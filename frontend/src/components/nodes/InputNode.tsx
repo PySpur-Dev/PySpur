@@ -8,7 +8,7 @@ import {
   CanvasEdge,
   updateEdgesOnHandleRename
 } from '../../store/canvasSlice';
-import { updateNodeData } from '../../store/nodeDataSlice';
+import { updateNodeData, updateJinjaTemplateReferences } from '../../store/nodeDataSlice';
 import { Input, Button, Alert } from '@nextui-org/react';
 import { Icon } from '@iconify/react';
 import styles from './InputNode.module.css';
@@ -157,9 +157,17 @@ const InputNode: React.FC<InputNodeProps> = ({ id, data, ...props }) => {
         schemaType: 'output_schema'
       }));
 
+      // Update Jinja template references in all downstream nodes
+      dispatch(updateJinjaTemplateReferences({
+        inputNodeId: id,
+        inputNodeTitle: data.title || id,
+        oldVariableName: oldKey,
+        newVariableName: validKey
+      }));
+
       setEditingField(null);
     },
-    [dispatch, outputSchema, data.config, id]
+    [dispatch, outputSchema, data.config, data.title, id]
   );
 
   const InputHandleRow: React.FC<{ id: string; keyName: string }> = ({ id, keyName }) => {

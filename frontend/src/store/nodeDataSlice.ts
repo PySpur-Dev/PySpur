@@ -125,6 +125,63 @@ const nodeDataSlice = createSlice({
       }
     },
 
+    updateJinjaTemplateReferences: (
+      state,
+      action: PayloadAction<{
+        inputNodeId: string;
+        inputNodeTitle: string;
+        oldVariableName: string;
+        newVariableName: string;
+      }>
+    ) => {
+      const { inputNodeId, inputNodeTitle, oldVariableName, newVariableName } = action.payload;
+
+      // Helper function to update Jinja templates in a string
+      const updateJinjaTemplatesInString = (content: string): string => {
+        if (!content) return content;
+        const pattern = new RegExp(`{{\\s*${inputNodeTitle}\\.${oldVariableName}\\s*}}`, 'g');
+        return content.replace(pattern, `{{${inputNodeTitle}.${newVariableName}}}`);
+      };
+
+      // Update all nodes' content
+      Object.keys(state.nodeDataById).forEach(nodeId => {
+        const nodeData = state.nodeDataById[nodeId];
+        if (!nodeData || !nodeData.config) return;
+
+        let hasChanges = false;
+        const updatedConfig = { ...nodeData.config };
+
+        // Fields that might contain Jinja templates
+        const templateFields = [
+          'system_message',
+          'user_message',
+          ...Object.keys(nodeData.config).filter(key =>
+            key.endsWith('_prompt') ||
+            key.endsWith('_message')
+          )
+        ];
+
+        // Update each field that might contain templates
+        templateFields.forEach(field => {
+          if (typeof updatedConfig[field] === 'string') {
+            const updatedContent = updateJinjaTemplatesInString(updatedConfig[field]);
+            if (updatedContent !== updatedConfig[field]) {
+              updatedConfig[field] = updatedContent;
+              hasChanges = true;
+            }
+          }
+        });
+
+        // If we found and updated any templates, update the node's config
+        if (hasChanges) {
+          state.nodeDataById[nodeId] = {
+            ...nodeData,
+            config: updatedConfig
+          };
+        }
+      });
+    },
+
     setNodeRunData: (
       state,
       action: PayloadAction<{ nodeId: string; runData: Record<string, any> }>
@@ -192,7 +249,8 @@ export const {
   setTestInputs,
   addTestInput,
   updateTestInput,
-  deleteTestInput
+  deleteTestInput,
+  updateJinjaTemplateReferences
 } = nodeDataSlice.actions;
 
 export default nodeDataSlice.reducer;
