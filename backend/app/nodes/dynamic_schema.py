@@ -1,8 +1,14 @@
-from abc import ABC
-from typing import Dict
+"""
+This module defines classes and methods for handling dynamic schemas
+using Pydantic models. It includes configurations for nodes with dynamic
+input/output schemas and a base class for such nodes.
+"""
 
+from abc import ABC
+from typing import Dict, Any
+
+from pydantic import BaseModel, create_model
 from .base import BaseNode
-from pydantic import BaseModel
 
 
 class DynamicSchemaNodeConfig(BaseModel):
@@ -14,6 +20,29 @@ class DynamicSchemaNodeConfig(BaseModel):
 
 class DynamicSchemaNode(BaseNode, ABC):
     """Base class for nodes with dynamic input/output schemas."""
+
+    @staticmethod
+    def get_model_for_schema_dict(schema: Dict[str, str], schema_name: str) -> Any:
+        """
+        Create and return a Pydantic model based on a schema dictionary.
+        """
+        type_mapping: Dict[str, Any] = {
+            "Any": Any,
+            "str": str,
+            "int": int,
+            "float": float,
+            "bool": bool,
+            "any": Any,  # Handle lowercase "any" by mapping it to Any
+        }
+
+        fields = {}
+        for key, value in schema.items():
+            # If the type is not recognized, raise an error instead of using eval
+            if value not in type_mapping:
+                raise ValueError(f"Unsupported type '{value}' in schema for field '{key}'")
+            fields[key] = (type_mapping[value], ...)
+
+        return create_model(schema_name, **fields) # type: ignore
 
     def setup(self) -> None:
         """Set up dynamic input/output models based on configuration."""

@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { createNode } from '../utils/nodeFactory';
 import { config, title } from 'process';
 import { TestInput } from '@/types/api_types/workflowSchemas';
+import { WorkflowDefinition, WorkflowNodeCoordinates } from '@/types/api_types/workflowSchemas';
+import { RouteConditionGroup } from '@/types/api_types/routerSchemas';
 
 type NodeTypes = {
   [key: string]: any;
@@ -16,7 +18,6 @@ interface NodeTypesConfig {
 }
 
 
-import { WorkflowDefinition, WorkflowNodeCoordinates } from '@/types/api_types/workflowSchemas';
 
 export interface FlowWorkflowNode {
   id: string;
@@ -33,6 +34,7 @@ export interface FlowWorkflowNode {
       system_message?: string;
       user_message?: string;
       few_shot_examples?: Record<string, any>[] | null;
+      route_map?: Record<string, RouteConditionGroup>;
       [key: string]: any;
     },
     run?: Record<string, any>;
@@ -125,8 +127,8 @@ const flowSlice = createSlice({
         selected: false,
         source: link.source_id,
         target: link.target_id,
-        sourceHandle: state.nodes.find(node => node.id === link.source_id)?.data?.config.title || state.nodes.find(node => node.id === link.source_id)?.data?.title,
-        targetHandle: state.nodes.find(node => node.id === link.source_id)?.data?.config.title || state.nodes.find(node => node.id === link.source_id)?.data?.title,
+        sourceHandle: link.source_handle || state.nodes.find(node => node.id === link.source_id)?.data?.config.title || state.nodes.find(node => node.id === link.source_id)?.data?.title,
+        targetHandle: link.target_handle || state.nodes.find(node => node.id === link.target_id)?.data?.config.title || state.nodes.find(node => node.id === link.target_id)?.data?.title,
       }));
       state.edges = edges;
 
@@ -144,9 +146,19 @@ const flowSlice = createSlice({
     connect: (state, action: PayloadAction<{ connection: Connection }>) => {
       saveToHistory(state);
       let { connection } = action.payload;
-      // make target handle the same as source handle
-      connection = { ...connection, targetHandle: connection.sourceHandle };
       state.edges = addEdge(connection, state.edges);
+      const targetNode = state.nodes.find((node) => node.id === connection.target);
+      if (targetNode && targetNode.type === 'RouterNode') {
+        // update the router node's input schema
+        const sourceNode = state.nodes.find((node) => node.id === connection.source);
+        if (sourceNode && sourceNode.data && sourceNode.data.config && sourceNode.data.config.output_schema) {
+          const outputSchema = sourceNode.data.config.output_schema;
+          targetNode.data.config.input_schema = {
+            ...targetNode.data.config.input_schema,
+            ...outputSchema
+          };
+        }
+      }
     },
 
     addNode: (state, action: PayloadAction<{ node: FlowWorkflowNode }>) => {

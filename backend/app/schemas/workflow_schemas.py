@@ -55,6 +55,8 @@ class WorkflowLinkSchema(BaseModel):
 
     source_id: str
     target_id: str
+    source_handle: Optional[str] = None  # The output handle from the source node
+    target_handle: Optional[str] = None  # The input handle on the target node
 
 
 class WorkflowDefinitionSchema(BaseModel):

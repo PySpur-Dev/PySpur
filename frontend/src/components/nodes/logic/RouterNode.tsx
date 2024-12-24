@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Handle, Position, useConnection } from '@xyflow/react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Handle, Position, useConnection, useUpdateNodeInternals } from '@xyflow/react';
 import BaseNode from '../BaseNode';
 import { Input, Card, Divider, Button, Select, SelectItem, RadioGroup, Radio } from '@nextui-org/react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -7,57 +7,52 @@ import { updateNodeData } from '../../../store/flowSlice';
 import styles from '../DynamicNode.module.css';
 import { Icon } from "@iconify/react";
 import { RootState } from '../../../store/store';
+import {
+  ComparisonOperator,
+  LogicalOperator,
+  RouteConditionRule,
+  RouteConditionGroup
+} from '../../../types/api_types/routerSchemas';
 
-interface Condition {
-  logicalOperator?: 'AND' | 'OR';
-  variable: string;
-  operator: string;
-  value: string;
-}
-
-interface Branch {
-  conditions: Condition[];
-}
-
-interface IfElseNodeData {
+interface RouterNodeData {
   color?: string;
   config: {
-    branches: Branch[];
+    route_map: Record<string, RouteConditionGroup>;
     input_schema?: Record<string, string>;
     output_schema?: Record<string, string>;
     title?: string;
   };
 }
 
-interface IfElseNodeProps {
+interface RouterNodeProps {
   id: string;
-  data: IfElseNodeData;
+  data: RouterNodeData;
   selected?: boolean;
 }
 
-const OPERATORS = [
-  { value: 'contains', label: 'Contains' },
-  { value: 'equals', label: 'Equals' },
-  { value: 'number_equals', label: 'Number Equals' },
-  { value: 'greater_than', label: 'Greater Than' },
-  { value: 'less_than', label: 'Less Than' },
-  { value: 'starts_with', label: 'Starts With' },
-  { value: 'not_starts_with', label: 'Does Not Start With' },
-  { value: 'is_empty', label: 'Is Empty' },
-  { value: 'is_not_empty', label: 'Is Not Empty' },
+const OPERATORS: { value: ComparisonOperator; label: string }[] = [
+  { value: ComparisonOperator.CONTAINS, label: 'Contains' },
+  { value: ComparisonOperator.EQUALS, label: 'Equals' },
+  { value: ComparisonOperator.NUMBER_EQUALS, label: 'Number Equals' },
+  { value: ComparisonOperator.GREATER_THAN, label: 'Greater Than' },
+  { value: ComparisonOperator.LESS_THAN, label: 'Less Than' },
+  { value: ComparisonOperator.STARTS_WITH, label: 'Starts With' },
+  { value: ComparisonOperator.NOT_STARTS_WITH, label: 'Does Not Start With' },
+  { value: ComparisonOperator.IS_EMPTY, label: 'Is Empty' },
+  { value: ComparisonOperator.IS_NOT_EMPTY, label: 'Is Not Empty' },
 ];
 
-const DEFAULT_CONDITION: Condition = {
+const DEFAULT_CONDITION: RouteConditionRule = {
   variable: '',
-  operator: 'contains',
+  operator: ComparisonOperator.CONTAINS,
   value: ''
 };
 
-const DEFAULT_BRANCH: Branch = {
-  conditions: [{ ...DEFAULT_CONDITION }]
+const DEFAULT_ROUTE: RouteConditionGroup = {
+  conditions: [{ ...DEFAULT_CONDITION }],
 };
 
-export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
+export const RouterNode: React.FC<RouterNodeProps> = ({ id, data }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [nodeWidth, setNodeWidth] = useState<string>('auto');
   const nodeRef = useRef<HTMLDivElement | null>(null);
@@ -68,31 +63,49 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
     return nodes.find((node) => node.id === edge.source);
   }));
 
-  // Get available input variables from the schema
-  const inputVariables = Object.entries(data.config?.input_schema || {}).map(([key, type]) => ({
-    value: key,
-    label: `${key} (${type})`,
-  }));
+  // Get available input variables from the connected node's output schema
+  const inputVariables = useMemo(() => {
+    const connectedNode = predecessorNodes[0];
+    if (!connectedNode) return [];
 
-  // Initialize branches if they don't exist or are invalid
-  useEffect(() => {
-    if (!data.config?.branches || !Array.isArray(data.config.branches) || data.config.branches.length === 0) {
-      handleUpdateBranches([{ ...DEFAULT_BRANCH }]);
-    } else {
-      // Ensure each branch has valid conditions
-      const validBranches = data.config.branches.map(branch => ({
-        conditions: Array.isArray(branch.conditions) && branch.conditions.length > 0
-          ? branch.conditions.map((condition, index) => ({
-            ...condition,
-            logicalOperator: index > 0 ? (condition.logicalOperator || 'AND') : undefined
-          }))
-          : [{ ...DEFAULT_CONDITION }]
-      }));
-      if (JSON.stringify(validBranches) !== JSON.stringify(data.config.branches)) {
-        handleUpdateBranches(validBranches);
-      }
-    }
-  }, []);
+    const outputSchema = connectedNode.data?.config?.output_schema || {};
+    return Object.entries(outputSchema).map(([key, type]) => ({
+      value: key,
+      label: `${key} (${type})`,
+    }));
+  }, [predecessorNodes]);
+
+  // Initialize routes if they don't exist or are invalid
+  // useEffect(() => {
+  //   if (!data.config?.route_map || Object.keys(data.config.route_map).length === 0) {
+  //     handleUpdateRouteMap({ route1: { ...DEFAULT_ROUTE } });
+  //   } else {
+  //     // Ensure each route has valid conditions
+  //     const validRouteMap: RouteMap = Object.entries(data.config.route_map).reduce((acc, [routeKey, route]) => {
+  //       const conditions = Array.isArray(route.conditions) && route.conditions.length > 0
+  //         ? route.conditions.map((condition, index): Condition => {
+  //           const baseCondition: Condition = {
+  //             variable: condition.variable || '',
+  //             operator: (condition.operator || 'contains') as ComparisonOperator,
+  //             value: condition.value || ''
+  //           };
+
+  //           if (index > 0) {
+  //             baseCondition.logicalOperator = (condition.logicalOperator || 'AND') as LogicalOperator;
+  //           }
+
+  //           return baseCondition;
+  //         })
+  //         : [{ ...DEFAULT_CONDITION }];
+  //       acc[routeKey] = { conditions };
+  //       return acc;
+  //     }, {} as RouteMap);
+
+  //     if (JSON.stringify(validRouteMap) !== JSON.stringify(data.config.route_map)) {
+  //       handleUpdateRouteMap(validRouteMap);
+  //     }
+  //   }
+  // }, [data.config.route_map]);
 
   const connection = useConnection();
 
@@ -130,97 +143,79 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
     setNodeWidth(`${Math.min(Math.max(minNodeWidth, nodeRef.current.scrollWidth), maxNodeWidth)}px`);
   }, [data]);
 
-  const handleUpdateBranches = (newBranches: Branch[]) => {
+  const handleUpdateRouteMap = (newRouteMap: Record<string, RouteConditionGroup>) => {
     const output_schema: Record<string, string> = {};
-    newBranches.forEach((_, index) => {
-      output_schema[`branch${index + 1}`] = 'any';
+    Object.keys(newRouteMap).forEach((routeKey) => {
+      output_schema[routeKey] = 'any';
     });
 
-    const updatedData: IfElseNodeData = {
+    const updatedData: RouterNodeData = {
       ...data,
       config: {
         ...data.config,
-        branches: newBranches,
-        input_schema: data.config?.input_schema || { input: 'any' },
-        output_schema
-      }
+        route_map: newRouteMap,
+        input_schema: data.config?.input_schema,
+        output_schema,
+      },
     };
 
-    dispatch(updateNodeData({
-      id,
-      data: updatedData
-    }));
+    dispatch(updateNodeData({ id, data: updatedData }));
   };
 
-  const addBranch = () => {
-    const newBranch: Branch = {
-      conditions: [{
-        variable: '',
-        operator: 'contains',
-        value: ''
-      }]
+  const addRoute = () => {
+    const newRouteKey = `route${Object.keys(data.config?.route_map || {}).length + 1}`;
+    const newRouteMap = {
+      ...data.config.route_map,
+      [newRouteKey]: { ...DEFAULT_ROUTE },
     };
-
-    const newBranches: Branch[] = [
-      ...(data.config?.branches || []),
-      newBranch
-    ];
-
-    handleUpdateBranches(newBranches);
+    handleUpdateRouteMap(newRouteMap);
   };
 
-  const removeBranch = (index: number) => {
-    const newBranches = [...(data.config?.branches || [])];
-    newBranches.splice(index, 1);
-    handleUpdateBranches(newBranches);
+  const removeRoute = (routeKey: string) => {
+    const { [routeKey]: _, ...newRouteMap } = data.config.route_map || {};
+    handleUpdateRouteMap(newRouteMap);
   };
 
-  const addCondition = (branchIndex: number) => {
-    const newBranches = [...(data.config?.branches || [])].map((branch, index) => {
-      if (index === branchIndex) {
-        return {
-          ...branch,
-          conditions: [
-            ...(branch.conditions || []),
-            { ...DEFAULT_CONDITION, logicalOperator: 'AND' }
-          ]
-        };
-      }
-      return branch;
-    });
-    handleUpdateBranches(newBranches);
+  const addCondition = (routeKey: string) => {
+    const newRouteMap = {
+      ...data.config.route_map,
+      [routeKey]: {
+        conditions: [
+          ...data.config.route_map[routeKey].conditions,
+          { ...DEFAULT_CONDITION, logicalOperator: 'AND' as const },
+        ],
+      },
+    };
+    handleUpdateRouteMap(newRouteMap);
   };
 
-  const removeCondition = (branchIndex: number, conditionIndex: number) => {
-    const newBranches = [...(data.config?.branches || [])].map((branch, index) => {
-      if (index === branchIndex && branch.conditions?.length > 1) {
-        return {
-          ...branch,
-          conditions: branch.conditions.filter((_, i) => i !== conditionIndex)
-        };
-      }
-      return branch;
-    });
-    handleUpdateBranches(newBranches);
+  const removeCondition = (routeKey: string, conditionIndex: number) => {
+    const newRouteMap = {
+      ...data.config.route_map,
+      [routeKey]: {
+        conditions: data.config.route_map[routeKey].conditions.filter(
+          (_, i) => i !== conditionIndex
+        ),
+      },
+    };
+    handleUpdateRouteMap(newRouteMap);
   };
 
-  const updateCondition = (branchIndex: number, conditionIndex: number, field: keyof Condition, value: string) => {
-    const newBranches = [...(data.config?.branches || [])].map((branch, index) => {
-      if (index === branchIndex) {
-        return {
-          ...branch,
-          conditions: (branch.conditions || []).map((condition, i) => {
-            if (i === conditionIndex) {
-              const updatedValue = field === 'logicalOperator' ? (value as 'AND' | 'OR') : value;
-              return { ...condition, [field]: updatedValue };
-            }
-            return condition;
-          })
-        };
-      }
-      return branch;
-    });
-    handleUpdateBranches(newBranches as Branch[]);
+  const updateCondition = (
+    routeKey: string,
+    conditionIndex: number,
+    field: keyof RouteConditionRule,
+    value: string
+  ) => {
+    const newRouteMap = {
+      ...data.config.route_map,
+      [routeKey]: {
+        conditions: data.config.route_map[routeKey].conditions.map((condition, i) =>
+          i === conditionIndex ? { ...condition, [field]: value } : condition
+        ),
+      },
+    };
+    handleUpdateRouteMap(newRouteMap);
   };
 
   return (
@@ -261,25 +256,24 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
               <Divider className="flex-grow" />
             </div>
 
-            {/* Branches */}
+            {/* Routes */}
             <div className="flex flex-col gap-4">
-              {(data.config?.branches || []).map((branch, branchIndex) => (
-                <Card
-                  key={branchIndex}
-                  classNames={{
-                    base: "bg-background border-default-200"
-                  }}
-                >
+              {Object.entries(data.config.route_map || {}).map(([routeKey, route]) => (
+                console.log(route),
+                <Card key={routeKey} classNames={{ base: 'bg-background border-default-200' }}>
                   <div className="flex flex-col gap-3">
                     {/* Conditions */}
-                    {(branch.conditions || []).map((condition, conditionIndex) => (
+                    {(route.conditions || []).map((condition, conditionIndex) => (
+                      console.log(condition),
                       <div key={conditionIndex} className="flex flex-col gap-2">
                         {conditionIndex > 0 && (
                           <div className="flex items-center gap-2 justify-center">
                             <RadioGroup
                               orientation="horizontal"
                               value={condition.logicalOperator}
-                              onValueChange={(value) => updateCondition(branchIndex, conditionIndex, 'logicalOperator', value)}
+                              onValueChange={(value) =>
+                                updateCondition(routeKey, conditionIndex, 'logicalOperator', value)
+                              }
                               size="sm"
                             >
                               <Radio value="AND">AND</Radio>
@@ -291,7 +285,9 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                           <Select
                             size="sm"
                             value={condition.variable}
-                            onChange={(e) => updateCondition(branchIndex, conditionIndex, 'variable', e.target.value)}
+                            onChange={(e) =>
+                              updateCondition(routeKey, conditionIndex, 'variable', e.target.value)
+                            }
                             placeholder="Select variable"
                             className="flex-1"
                             classNames={{
@@ -308,7 +304,7 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                           <Select
                             size="sm"
                             value={condition.operator}
-                            onChange={(e) => updateCondition(branchIndex, conditionIndex, 'operator', e.target.value)}
+                            onChange={(e) => updateCondition(routeKey, conditionIndex, 'operator', e.target.value)}
                             className="flex-1"
                             classNames={{
                               trigger: "bg-default-100 dark:bg-default-50",
@@ -325,7 +321,9 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                             <Input
                               size="sm"
                               value={condition.value}
-                              onChange={(e) => updateCondition(branchIndex, conditionIndex, 'value', e.target.value)}
+                              onChange={(e) =>
+                                updateCondition(routeKey, conditionIndex, 'value', e.target.value)
+                              }
                               placeholder="Value"
                               className="flex-1"
                               classNames={{
@@ -338,8 +336,8 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                             size="sm"
                             color="danger"
                             isIconOnly
-                            onClick={() => removeCondition(branchIndex, conditionIndex)}
-                            disabled={branch.conditions?.length === 1}
+                            onClick={() => removeCondition(routeKey, conditionIndex)}
+                            disabled={route.conditions.length === 1}
                           >
                             <Icon icon="solar:trash-bin-trash-linear" width={18} />
                           </Button>
@@ -351,22 +349,22 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                     <Button
                       size="sm"
                       variant="flat"
-                      onClick={() => addCondition(branchIndex)}
+                      onClick={() => addCondition(routeKey)}
                       startContent={<Icon icon="solar:add-circle-linear" width={18} />}
                       className="bg-default-100 dark:bg-default-50 hover:bg-default-200 dark:hover:bg-default-100"
                     >
                       Add Condition
                     </Button>
 
-                    {/* Branch Output Handle */}
+                    {/* Route Output Handle */}
                     <div className={`${styles.handleRow} w-full justify-end mt-2`}>
                       <div className="align-center flex flex-grow flex-shrink mr-2">
-                        <span className="text-sm font-medium ml-auto text-foreground">Branch {branchIndex + 1} →</span>
+                        <span className="text-sm font-medium ml-auto text-foreground">{routeKey} →</span>
                       </div>
                       <Handle
                         type="source"
                         position={Position.Right}
-                        id={`branch${branchIndex + 1}`}
+                        id={routeKey}
                         className={`${styles.handle} ${styles.handleRight} ${isCollapsed ? styles.collapsedHandleOutput : ''}`}
                       />
                     </div>
@@ -374,28 +372,28 @@ export const IfElseNode: React.FC<IfElseNodeProps> = ({ id, data }) => {
                 </Card>
               ))}
 
-              {/* Add Branch Button */}
+              {/* Add Route Button */}
               <Button
                 size="sm"
                 color="primary"
                 variant="flat"
-                onClick={addBranch}
+                onClick={addRoute}
                 startContent={<Icon icon="solar:add-circle-linear" width={18} />}
                 className="bg-default-100 dark:bg-default-50 hover:bg-default-200 dark:hover:bg-default-100"
               >
-                Add Branch
+                Add Route
               </Button>
             </div>
           </>
         )}
 
         {/* Output handles when collapsed */}
-        {isCollapsed && (data.config?.branches || []).map((_, branchIndex) => (
-          <div key={branchIndex} className={`${styles.handleRow} w-full justify-end mt-2`}>
+        {isCollapsed && Object.keys(data.config?.route_map || {}).map((routeKey) => (
+          <div key={routeKey} className={`${styles.handleRow} w-full justify-end mt-2`}>
             <Handle
               type="source"
               position={Position.Right}
-              id={`branch${branchIndex + 1}`}
+              id={routeKey}
               className={`${styles.handle} ${styles.handleRight} ${styles.collapsedHandleOutput}`}
             />
           </div>

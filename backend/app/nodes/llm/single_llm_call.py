@@ -32,7 +32,12 @@ class SingleLLMCallNodeConfig(VariableOutputBaseNodeConfig):
 
 
 class SingleLLMCallNodeInput(BaseNodeInput):
-    pass
+    """
+    We allow any/all extra fields, so that the entire dictionary passed in 
+    is available in `input.model_dump()`.
+    """
+    class Config:
+        extra = "allow"
 
 
 class SingleLLMCallNodeOutput(BaseNodeOutput):
@@ -51,45 +56,51 @@ class SingleLLMCallNode(VariableOutputBaseNode):
     output_model = SingleLLMCallNodeOutput
 
     def setup(self) -> None:
+        print("[DEBUG] Setting up SingleLLMCallNode with config:", self.config)
         return super().setup()
 
     async def run(self, input: BaseModel) -> BaseModel:
-        output_schema = self.config.output_schema
+        # Grab the entire dictionary from the input
+        raw_input_dict = input.model_dump()
+        print("[DEBUG] Full raw_input_dict in SingleLLMCallNode:", raw_input_dict)
 
-        system_message = Template(self.config.system_message).render(input)
+        # Render system_message
+        system_message = Template(self.config.system_message).render(raw_input_dict) 
         system_message += (
-            f"\nMake sure the output is a JSON Object like this: {output_schema}"
+            f"\nMake sure the output is a JSON Object like this: {self.config.output_schema}"
         )
 
-        # Render the user_message using Jinja2 template if provided, otherwise use the input as is
-        if self.config.user_message is None or self.config.user_message.strip() == "":
-            user_message = json.dumps(input.model_dump(), indent=2)
+        # If user_message is empty, dump the entire raw dictionary
+        if not self.config.user_message.strip():
+            user_message = json.dumps(raw_input_dict, indent=2)
         else:
-            user_message = Template(self.config.user_message).render(
-                **input.model_dump()
-            )
+            user_message = Template(self.config.user_message).render(**raw_input_dict)
+
         messages = create_messages(
             system_message=system_message,
             user_message=user_message,
             few_shot_examples=self.config.few_shot_examples,
         )
-        # Build kwargs for generate_text
+
         kwargs = {
             "messages": messages,
             "model_name": LLMModels(self.config.llm_info.model).value,
             "temperature": self.config.llm_info.temperature,
             "json_mode": True,
         }
-        if self.config.llm_info.model.startswith("ollama"):
-            kwargs["api_base"] = os.getenv("OLLAMA_BASE_URL")
-        assistant_message = await generate_text(**kwargs)
-        assistant_message = json.loads(assistant_message)
-        assistant_message = self.output_model.model_validate(assistant_message)
+
+        assistant_message_str = await generate_text(**kwargs)
+        assistant_message_dict = json.loads(assistant_message_str)
+
+        # Validate and return
+        assistant_message = self.output_model.model_validate(assistant_message_dict)
         return assistant_message
+
 
 
 if __name__ == "__main__":
     from pydantic import create_model
+    import asyncio
 
     async def test_llm_nodes():
         # Example 1: Simple test case with a basic user message
@@ -97,13 +108,14 @@ if __name__ == "__main__":
             name="WeatherBot",
             config=SingleLLMCallNodeConfig(
                 llm_info=ModelInfo(
-                    model=LLMModels.GPT_4O_MINI, temperature=0.1, max_tokens=100
+                    model=LLMModels.GPT_4O, temperature=0.1, max_tokens=100
                 ),
                 system_message="This is a simple test prompt for {{ Input.your_name }}.",
                 user_message="Hello, my name is {{ Input.your_name }}. I want to ask: {{ Input.user_message }}",
                 output_schema={"response": "str", "what_was_my_name_again?": "str"},
             ),
         )
+
         simple_input = create_model(
             "SimpleInput",
             your_name=(str, ...),
@@ -112,9 +124,9 @@ if __name__ == "__main__":
         ).model_validate(
             {"your_name": "Alice", "user_message": "What is the weather like today?"}
         )
-        simple_output = await simple_llm_node({"Input": simple_input})
-        print("Simple Test Output:", simple_output)
 
-    import asyncio
+        print("[DEBUG] Testing simple_llm_node now...")
+        simple_output = await simple_llm_node({"Input": simple_input})
+        print("[DEBUG] Test Output from single_llm_call:", simple_output)
 
     asyncio.run(test_llm_nodes())

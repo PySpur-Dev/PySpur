@@ -250,6 +250,7 @@ const Header: React.FC<HeaderProps> = ({ activePage }) => {
           const initialInputs = {
             [inputNodeId]: inputValues
           };
+          console.log('Initial inputs:', initialInputs);
           executeWorkflow(initialInputs);
         }
       }

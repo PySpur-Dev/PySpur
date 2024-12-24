@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, Iterator, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from ..nodes.base import BaseNodeOutput
 from ..nodes.factory import NodeFactory
@@ -35,11 +35,13 @@ class WorkflowExecutor:
         self.context = context
         self._node_dict: Dict[str, WorkflowNodeSchema] = {}
         self._dependencies: Dict[str, Set[str]] = {}
-        self._node_tasks: Dict[str, asyncio.Task[BaseNodeOutput]] = {}
+        self._node_tasks: Dict[str, asyncio.Task[Optional[BaseNodeOutput]]] = {}
         self._initial_inputs: Dict[str, Dict[str, Any]] = (
             {}
         )  # <node_id, <input for the node>>
-        self._outputs: Dict[str, BaseNodeOutput] = {}  # <node_id, < node output>>
+        self._outputs: Dict[str, Optional[BaseNodeOutput]] = (
+            {}
+        )  # <node_id, < node output>>
         self._build_node_dict()
         self._build_dependencies()
 
@@ -54,9 +56,22 @@ class WorkflowExecutor:
             dependencies[link.target_id].add(link.source_id)
         self._dependencies = dependencies
 
+    def _get_source_handles(self) -> Dict[Tuple[str, str], str]:
+        """Build a mapping of (source_id, target_id) -> source_handle for router nodes only"""
+        source_handles: Dict[Tuple[str, str], str] = {}
+        for link in self.workflow.links:
+            source_node = self._node_dict[link.source_id]
+            if source_node.node_type == "RouterNode":
+                if not link.source_handle:
+                    raise ValueError(
+                        f"Missing source_handle in link from router node {link.source_id} to {link.target_id}"
+                    )
+                source_handles[(link.source_id, link.target_id)] = link.source_handle
+        return source_handles
+
     def _get_async_task_for_node_execution(
         self, node_id: str
-    ) -> asyncio.Task[BaseNodeOutput]:
+    ) -> asyncio.Task[Optional[BaseNodeOutput]]:
         if node_id in self._node_tasks:
             return self._node_tasks[node_id]
         # Start task for the node
@@ -68,14 +83,14 @@ class WorkflowExecutor:
             self.task_recorder.create_task(node_id, {})
         return task
 
-    async def _execute_node(self, node_id: str) -> BaseNodeOutput:
+    async def _execute_node(self, node_id: str) -> Optional[BaseNodeOutput]:
         if node_id in self._outputs:
             return self._outputs[node_id]
         node = self._node_dict[node_id]
 
         # Wait for dependencies
         dependency_ids = self._dependencies.get(node_id, set())
-        predecessor_outputs: List[BaseNodeOutput] = []
+        predecessor_outputs: List[Optional[BaseNodeOutput]] = []
         if dependency_ids:
             predecessor_outputs = await asyncio.gather(
                 *(
@@ -84,11 +99,36 @@ class WorkflowExecutor:
                 )
             )
 
-        node_input = dict(zip(dependency_ids, predecessor_outputs))
+        # Get source handles mapping
+        source_handles = self._get_source_handles()
+
+        # Build node input, handling router outputs specially
+        node_input = {}
+        for dep_id, output in zip(dependency_ids, predecessor_outputs):
+            source_node = self._node_dict[dep_id]
+            if source_node.node_type == "RouterNode":
+                # For router nodes, we must have a source handle
+                source_handle = source_handles.get((dep_id, node_id))
+                if not source_handle:
+                    raise ValueError(
+                        f"Missing source_handle in link from router node {dep_id} to {node_id}"
+                    )
+                # Get the specific route's output from the router
+                route_output = getattr(output, source_handle, None)
+                if route_output is not None:
+                    node_input[dep_id] = route_output
+            else:
+                node_input[dep_id] = output
+        print(f"Node input for {node_id}: {node_input}")
 
         # Special handling for InputNode - use initial inputs
         if node.node_type == "InputNode":
             node_input = self._initial_inputs.get(node_id, {})
+
+        # if any of the inputs are None, return None
+        if any([v is None for v in node_input.values()]):
+            self._outputs[node_id] = None
+            return None
 
         node_instance = NodeFactory.create_node(
             node_name=node.title, node_type_name=node.node_type, config=node.config
@@ -174,7 +214,12 @@ class WorkflowExecutor:
         # Wait for all tasks to complete
         await asyncio.gather(*self._node_tasks.values())
 
-        return self._outputs
+        # return the non-None outputs
+        return {
+            node_id: output
+            for node_id, output in self._outputs.items()
+            if output is not None
+        }
 
     async def __call__(
         self,

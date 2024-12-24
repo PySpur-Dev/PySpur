@@ -23,12 +23,12 @@ interface Condition {
   logicalOperator?: LogicalOperator;
 }
 
-interface BranchCondition {
+interface RouteCondition {
   conditions: Condition[];
 }
 
-interface IfElseNodeConfig {
-  branches: BranchCondition[];
+interface RouterNodeConfig {
+  routes: RouteCondition[];
   input_schema: Record<string, string>;
   output_schema: Record<string, string>;
   title?: string;
@@ -38,7 +38,7 @@ interface IfElseNodeConfig {
 interface NodeMetadata {
   name: string;
   config?: {
-    branches?: BranchCondition[];
+    routes?: RouteCondition[];
     input_schema?: Record<string, string>;
     output_schema?: Record<string, string>;
     title?: string;
@@ -63,7 +63,7 @@ interface NodeTypesResponse {
 export interface NodeType {
   name: string;
   config: {
-    branches?: BranchCondition[];
+    routes?: RouteCondition[];
     input_schema?: Record<string, string>;
     output_schema?: Record<string, string>;
     title?: string;
