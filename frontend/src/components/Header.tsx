@@ -415,7 +415,8 @@ const Header: React.FC<HeaderProps> = ({ activePage, associatedWorkflowId, runId
                                             >
                                                 {`${run.id} | ${run.status.toLowerCase()} ${
                                                     (run.status.toLowerCase() === 'running' ||
-                                                        run.status.toLowerCase() === 'pending') &&
+                                                        run.status.toLowerCase() === 'pending' ||
+                                                        run.status.toLowerCase() === 'paused') &&
                                                     run.start_time
                                                         ? `for last ${formatDistanceStrict(Date.parse(run.start_time + 'Z'), new Date(), { addSuffix: false })}`
                                                         : (run.status.toLowerCase() === 'failed' ||

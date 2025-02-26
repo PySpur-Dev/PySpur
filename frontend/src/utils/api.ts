@@ -6,6 +6,7 @@ import { EvalRunRequest, EvalRunResponse } from '@/types/api_types/evalSchemas'
 import { NodeTypeSchema, MinimumNodeConfigSchema } from '@/types/api_types/nodeTypeSchemas'
 import { OutputFileResponse } from '@/types/api_types/outputFileSchemas'
 import { RunResponse } from '@/types/api_types/runSchemas'
+import { PauseHistoryResponse, PausedWorkflowResponse, ResumeActionRequest } from '@/types/api_types/pausedWorkflowSchemas'
 import {
     DocumentChunkSchema,
     DocumentWithChunksSchema,
@@ -995,3 +996,52 @@ export const uploadTestFiles = async (
         throw error
     }
 }
+
+// Add new functions for paused workflows
+export const listPausedWorkflows = async (
+    page: number = 1,
+    pageSize: number = 10
+): Promise<PausedWorkflowResponse[]> => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/wf/paused_workflows/`, {
+            params: { page, page_size: pageSize },
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error listing paused workflows:', error);
+        throw error;
+    }
+}
+
+export const getPauseHistory = async (runId: string): Promise<PauseHistoryResponse[]> => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/wf/pause_history/${runId}/`);
+        return response.data;
+    } catch (error) {
+        console.error('Error getting pause history:', error);
+        throw error;
+    }
+}
+
+/**
+ * Take action on a paused workflow
+ */
+export const takePauseAction = async (
+    runId: string,
+    actionRequest: ResumeActionRequest
+): Promise<RunResponse> => {
+    const response = await fetch(`${API_BASE_URL}/wf/process_pause_action/${runId}/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(actionRequest),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to take action on paused workflow: ${errorText}`);
+    }
+
+    return await response.json();
+};

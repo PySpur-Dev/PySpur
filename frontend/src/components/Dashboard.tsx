@@ -1,5 +1,6 @@
 import { RunResponse } from '@/types/api_types/runSchemas'
 import { WorkflowCreateRequest, WorkflowDefinition, WorkflowResponse } from '@/types/api_types/workflowSchemas'
+import { PausedWorkflowResponse, ResumeActionRequest } from '@/types/api_types/pausedWorkflowSchemas'
 import {
     Accordion,
     AccordionItem,
@@ -33,9 +34,13 @@ import {
     getWorkflows,
     instantiateTemplate,
     listApiKeys,
+    listPausedWorkflows,
+    takePauseAction,
 } from '../utils/api'
 import TemplateCard from './cards/TemplateCard'
 import WelcomeModal from './modals/WelcomeModal'
+import HumanInputModal from './modals/HumanInputModal'
+import { formatDistanceToNow } from 'date-fns'
 
 // Calendly Widget Component
 const CalendlyWidget: React.FC = () => {
@@ -114,6 +119,25 @@ const Dashboard: React.FC = () => {
     const [workflowPage, setWorkflowPage] = useState(1)
     const [hasMoreWorkflows, setHasMoreWorkflows] = useState(true)
     const [isLoadingMore, setIsLoadingMore] = useState(false)
+    const [pausedWorkflows, setPausedWorkflows] = useState<PausedWorkflowResponse[]>([])
+    const [selectedWorkflow, setSelectedWorkflow] = useState<PausedWorkflowResponse | null>(null)
+    const [isHumanInputModalOpen, setIsHumanInputModalOpen] = useState(false)
+    const [isLoadingPaused, setIsLoadingPaused] = useState(false)
+    const [alertMessage, setAlertMessage] = useState<string | null>(null)
+    const [alertColor, setAlertColor] = useState<'success' | 'danger' | 'warning' | 'default'>('default')
+    const [showAlert, setShowAlert] = useState(false)
+
+    // Function to show alerts
+    const onAlert = (message: string, color: 'success' | 'danger' | 'warning' | 'default' = 'default') => {
+        setAlertMessage(message);
+        setAlertColor(color);
+        setShowAlert(true);
+
+        // Auto-hide the alert after 5 seconds
+        setTimeout(() => {
+            setShowAlert(false);
+        }, 5000);
+    };
 
     useEffect(() => {
         const fetchWorkflows = async () => {
@@ -175,6 +199,22 @@ const Dashboard: React.FC = () => {
         }
 
         fetchApiKeys()
+    }, [])
+
+    useEffect(() => {
+        const fetchPausedWorkflows = async () => {
+            setIsLoadingPaused(true)
+            try {
+                const paused = await listPausedWorkflows()
+                setPausedWorkflows(paused)
+            } catch (error) {
+                console.error('Error fetching paused workflows:', error)
+            } finally {
+                setIsLoadingPaused(false)
+            }
+        }
+
+        fetchPausedWorkflows()
     }, [])
 
     const formatDate = (dateString: string) => {
@@ -339,11 +379,83 @@ const Dashboard: React.FC = () => {
         }
     }
 
+    const handleHumanInputSubmit = async (
+        action: 'APPROVE' | 'DECLINE' | 'OVERRIDE',
+        inputData: Record<string, any>,
+        comments: string
+    ) => {
+        if (!selectedWorkflow) return;
+
+        try {
+            // Log the workflow object structure for debugging
+            console.log("Selected workflow:", selectedWorkflow);
+            console.log("Input data:", inputData);
+
+            // Get run ID - this should always be available
+            const runId = selectedWorkflow.run.id;
+
+            // Get workflow ID directly from the run object (not needed for takePauseAction but keeping for logs)
+            const workflowId = selectedWorkflow.run.workflow_id;
+
+            console.log("Workflow ID:", workflowId);
+            console.log("Run ID:", runId);
+
+            if (runId) {
+                try {
+                    // Create the action request object
+                    const actionRequest: ResumeActionRequest = {
+                        inputs: inputData,
+                        user_id: 'current-user',
+                        action,
+                        comments
+                    };
+
+                    // Call takePauseAction with the request
+                    await takePauseAction(runId, actionRequest);
+
+                    // Show success message
+                    onAlert(`Workflow resumed with action: ${action}`, 'success');
+
+                    // Close the modal
+                    setIsHumanInputModalOpen(false);
+                    setSelectedWorkflow(null);
+
+                } catch (resumeError) {
+                    console.error('Error resuming workflow:', resumeError);
+                    onAlert('Failed to resume workflow', 'danger');
+                }
+            } else {
+                console.error('Cannot resume workflow: Run ID is missing or invalid');
+                onAlert('Cannot resume workflow: missing run ID', 'danger');
+            }
+
+            // Refresh paused workflows
+            const paused = await listPausedWorkflows();
+            setPausedWorkflows(paused);
+        } catch (error) {
+            console.error('Error submitting human input:', error);
+            onAlert('Error submitting human input', 'danger');
+        }
+    };
+
     return (
         <div className="flex flex-col gap-2 max-w-7xl w-full mx-auto pt-2 px-6">
             <Head>
                 <link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet" />
             </Head>
+
+            {/* Alert message */}
+            {showAlert && alertMessage && (
+                <Alert
+                    className="mb-4"
+                    variant="solid"
+                    color={alertColor}
+                    onClose={() => setShowAlert(false)}
+                >
+                    {alertMessage}
+                </Alert>
+            )}
+
             <CalendlyWidget />
             <WelcomeModal isOpen={showWelcome} onClose={() => setShowWelcome(false)} />
             <div>
@@ -391,7 +503,7 @@ const Dashboard: React.FC = () => {
                 </header>
 
                 {/* Wrap sections in Accordion */}
-                <Accordion defaultExpandedKeys={['workflows', 'templates']} selectionMode="multiple">
+                <Accordion defaultExpandedKeys={new Set(['workflows', 'templates', 'human-tasks'])} selectionMode="multiple">
                     <AccordionItem
                         key="workflows"
                         aria-label="Recent Spurs"
@@ -575,8 +687,78 @@ const Dashboard: React.FC = () => {
                             ))}
                         </div>
                     </AccordionItem>
+                    <AccordionItem
+                        key="human-tasks"
+                        aria-label="Human Tasks"
+                        title={
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-xl font-semibold">Human Tasks</h3>
+                                {pausedWorkflows.length > 0 && (
+                                    <Chip color="warning" variant="flat" size="sm">
+                                        {pausedWorkflows.length}
+                                    </Chip>
+                                )}
+                            </div>
+                        }
+                    >
+                        {isLoadingPaused ? (
+                            <div className="flex justify-center p-4">
+                                <Spinner size="lg" />
+                            </div>
+                        ) : pausedWorkflows.length > 0 ? (
+                            <div className="space-y-4">
+                                {pausedWorkflows.map((workflow) => (
+                                    <div
+                                        key={workflow.run.id}
+                                        className="flex items-center justify-between p-4 bg-content2 rounded-lg border border-border"
+                                    >
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <h4 className="font-medium">{(workflow.workflow as WorkflowResponse).name}</h4>
+                                                <Chip size="sm" color="warning">Paused</Chip>
+                                            </div>
+                                            <p className="text-sm text-default-500 mb-2">
+                                                {workflow.current_pause.pause_message}
+                                            </p>
+                                            <div className="flex items-center gap-4 text-xs text-default-400">
+                                                <span>Run ID: {workflow.run.id}</span>
+                                                <span>•</span>
+                                                <span>
+                                                    Paused {formatDistanceToNow(new Date(workflow.current_pause.pause_time), { addSuffix: true })}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            color="primary"
+                                            onPress={() => {
+                                                setSelectedWorkflow(workflow)
+                                                setIsHumanInputModalOpen(true)
+                                            }}
+                                        >
+                                            Review & Action
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-default-500">
+                                No workflows currently require human input.
+                            </div>
+                        )}
+                    </AccordionItem>
                 </Accordion>
             </div>
+            {selectedWorkflow && (
+                <HumanInputModal
+                    isOpen={isHumanInputModalOpen}
+                    onClose={() => {
+                        setIsHumanInputModalOpen(false)
+                        setSelectedWorkflow(null)
+                    }}
+                    workflow={selectedWorkflow}
+                    onSubmit={handleHumanInputSubmit}
+                />
+            )}
         </div>
     )
 }

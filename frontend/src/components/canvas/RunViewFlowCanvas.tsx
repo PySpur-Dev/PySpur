@@ -40,6 +40,7 @@ import {
     useNodesWithMode,
     useFlowEventHandlers,
     useAdjustGroupNodesZIndex,
+    useNodesWithStatus,
 } from '../../utils/flowUtils'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 
@@ -142,6 +143,12 @@ const RunViewFlowCanvasContent: React.FC<RunViewFlowCanvasProps> = ({ workflowDa
     })
 
     const nodesWithAdjustedZIndex = useAdjustGroupNodesZIndex({ nodes: nodesWithMode })
+
+    // Add status to nodes (especially marking pending nodes)
+    const nodesWithStatus = useNodesWithStatus({
+        nodes: nodesWithAdjustedZIndex,
+        nodeOutputs
+    })
 
     const onEdgeMouseEnter = useCallback((_: React.MouseEvent, edge: Edge) => {
         setHoveredEdge(edge.id)
@@ -319,7 +326,7 @@ const RunViewFlowCanvasContent: React.FC<RunViewFlowCanvasProps> = ({ workflowDa
                 >
                     <ReactFlow
                         key={`flow-${workflowID}`}
-                        nodes={nodesWithAdjustedZIndex}
+                        nodes={nodesWithStatus}
                         edges={styledEdges}
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}

@@ -14,7 +14,7 @@ from ..base import (
     BaseNodeInput,
     BaseNodeOutput,
 )
-from .function_call_node import FunctionCall
+
 
 class FunctionDefinition(BaseModel):
     name: str

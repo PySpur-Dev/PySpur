@@ -40,11 +40,18 @@ class TaskRecorder:
         subworkflow: Optional[WorkflowDefinitionSchema] = None,
         subworkflow_output: Optional[Dict[str, BaseModel]] = None,
         end_time: Optional[datetime] = None,
+        is_downstream_of_pause: bool = False,
     ):
         task = self.tasks.get(node_id)
         if not task:
             self.create_task(node_id, inputs={})
             task = self.tasks[node_id]
+
+        # If task is downstream of a paused node, mark it as pending instead of failed/canceled
+        if is_downstream_of_pause and status in [TaskStatus.FAILED, TaskStatus.CANCELED]:
+            status = TaskStatus.PENDING
+            error = None  # Clear any error message
+
         task.status = status
         if inputs:
             task.inputs = inputs

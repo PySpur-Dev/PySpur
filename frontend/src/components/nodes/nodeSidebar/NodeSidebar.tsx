@@ -265,6 +265,28 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ nodeID }) => {
                                 }
                             }
                         })
+                    } else if (node.type === 'HumanInterventionNode') {
+                        // For HumanInterventionNode, we need to look for the input fields
+                        // that are being passed through
+
+                        // Find nodes that feed into the HumanInterventionNode
+                        const humanNodeInputEdges = edges.filter((edge) => edge.target === node.id)
+                        const humanNodeInputs = humanNodeInputEdges.map((edge) => nodes.find((n) => n.id === edge.source))
+
+                        // Collect the schema from those nodes as they will be passed through
+                        humanNodeInputs.forEach(inputNode => {
+                            if (!inputNode) return
+                            const inputConfig = allNodeConfigs[inputNode.id]
+                            if (inputConfig?.output_json_schema) {
+                                const inputSchema = extractSchemaFromJsonSchema(inputConfig.output_json_schema)
+                                if (!inputSchema.error && inputSchema.schema && typeof inputSchema.schema === 'object') {
+                                    Object.keys(inputSchema.schema).forEach((key) => {
+                                        // These fields will be available from the HumanInterventionNode output
+                                        acc.push(`${nodeTitle}.${key}`)
+                                    })
+                                }
+                            }
+                        })
                     } else {
                         // For other nodes, keep the existing one-level behavior
                         Object.keys(schema).forEach((key) => {
